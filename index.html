@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>قسطوں کا حساب</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0F6B5C">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#F2F4F3; --surface:#FFFFFF; --ink:#14233B; --muted:#5E6B7A; --line:#DCE3E8;
+  --accent:#0F6B5C; --accent-ink:#FFFFFF; --in:#1D7A4B; --out:#B3392F; --warn:#B07800; --soft:#E6F0EE;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0E1620; --surface:#17222E; --ink:#E8EEF3; --muted:#9AA8B5; --line:#2A3846;
+    --accent:#3FB59F; --accent-ink:#08201B; --in:#4CC38A; --out:#F07A6E; --warn:#E5B73B; --soft:#1C2F33;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Noto Naskh Arabic","Geeza Pro","Segoe UI",Tahoma,system-ui,sans-serif;font-size:17px;line-height:1.7}
+body{padding-bottom:84px}
+.wrap{max-width:560px;margin:0 auto;padding:14px 14px 20px}
+h1{font-size:22px;margin:0}
+h2{font-size:18px;margin:20px 0 8px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.hero{background:var(--accent);color:var(--accent-ink);border-radius:18px;padding:18px 18px 16px;margin-bottom:12px}
+.hero .lbl{font-size:15px;opacity:.9}
+.hero .big{font-size:40px;font-weight:700;line-height:1.2;direction:ltr;text-align:right;font-variant-numeric:tabular-nums}
+.hero .sub{display:flex;gap:22px;margin-top:10px;font-size:15px}
+.hero .sub b{display:block;font-size:20px;direction:ltr;text-align:right}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.num{direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums;font-weight:600}
+.in{color:var(--in)} .out{color:var(--out)} .warn{color:var(--warn)} .muted{color:var(--muted);font-size:14px}
+.bar{height:9px;background:var(--soft);border-radius:6px;overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:6px}
+label{display:block;font-size:15px;color:var(--muted);margin:10px 0 4px}
+input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:17px}
+.btn{width:100%;margin-top:12px;padding:13px;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink);font:inherit;font-size:18px;font-weight:700}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent);font-size:16px;padding:10px}
+.btn.small{width:auto;padding:6px 14px;margin:0;font-size:15px}
+.del{border:0;background:transparent;color:var(--out);font:inherit;font-size:15px;padding:6px 8px}
+.link{border:0;background:transparent;color:var(--accent);font:inherit;font-size:16px;padding:6px 4px;font-weight:700}
+.item{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;border:0;background:transparent;color:var(--ink);font:inherit;text-align:right;padding:6px 0}
+.paid{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.paid:last-child{border-bottom:0}
+.paid input[type=checkbox]{width:24px;height:24px;flex:none;accent-color:var(--accent)}
+.paid .grow{flex:1}
+.paid.done{opacity:.6}
+.calc{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--soft);border:1px solid var(--accent);border-radius:12px;padding:12px 14px;margin:6px 0}
+.calc b{font-size:24px;color:var(--accent)}
+.deal{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:var(--surface)}
+.deal.open{border-color:var(--accent)}
+.empty{text-align:center;color:var(--muted);padding:18px 6px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:10}
+nav button{flex:1;border:0;background:transparent;color:var(--muted);font:inherit;font-size:14px;padding:10px 2px 8px;display:flex;flex-direction:column;align-items:center}
+nav button .ic{font-size:21px;line-height:1.2}
+nav button.on{color:var(--accent);font-weight:700}
+.toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:20px;font-size:15px;z-index:20;white-space:nowrap}
+table.rep{width:100%;border-collapse:collapse;margin:8px 0 4px;font-size:15px}
+table.rep th,table.rep td{border:1px solid var(--line);padding:6px 8px;text-align:center}
+table.rep th{background:var(--soft)}
+.rep-h{border-bottom:2px solid var(--accent);padding-bottom:8px;margin-bottom:10px}
+.rep-deal{margin-bottom:22px;break-inside:avoid}
+textarea{font-size:13px;direction:ltr;text-align:left;font-family:monospace}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+@media print{
+  :root{--bg:#fff;--surface:#fff;--ink:#000;--muted:#444;--line:#999;--soft:#eee;--accent:#0F6B5C;--in:#1D7A4B;--out:#B3392F;--warn:#8a5d00}
+  nav,.no-print,.toast{display:none!important}
+  body{padding:0}.wrap{max-width:none;padding:0}
+  .panel{border:0;padding:0}
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<nav id="nav"></nav>
+<div id="toast" class="toast" style="display:none"></div>
+
+<script>
+const MONTHS=['جنوری','فروری','مارچ','اپریل','مئی','جون','جولائی','اگست','ستمبر','اکتوبر','نومبر','دسمبر'];
+const KEY='qist-hisab-v2', OLD='mera-hisab-v1';
+const today=()=>new Date().toISOString().slice(0,10);
+const fmt=n=>Math.round(n||0).toLocaleString('en-IN');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+
+function newDeal(item,price,advance,pct,months){
+  months=months||12;
+  return {id:uid(),item:item||'نئی چیز',price:price||0,advance:advance||0,pct:pct==null?40:pct,months,start:'',agreed:0,recv:Array(months).fill(0)};
+}
+function defaultState(){return {clients:[]};}
+let state=defaultState();
+let ui={tab:'home',cid:null,open:null,confirm:null,rep:null};
+
+const S=window.storage
+  ?{get:k=>window.storage.get(k),set:(k,v)=>window.storage.set(k,v)}
+  :{get:async k=>{const v=localStorage.getItem(k);return v==null?null:{value:v}},set:async(k,v)=>{localStorage.setItem(k,v)}};
+
+async function load(){
+  try{
+    let r=null;
+    try{r=await S.get(KEY)}catch(e){}
+    if(r&&r.value){state=JSON.parse(r.value);}
+    else if(window.storage){
+      let o=null;try{o=await window.storage.get(OLD)}catch(e){}
+      if(o&&o.value){
+        const old=JSON.parse(o.value);
+        if(old.plans&&old.plans.length){
+          state={clients:[{id:uid(),name:'مولانا بلال صاحب',deals:old.plans.map(p=>{
+            const recv=(p.recv&&p.recv.length)?p.recv.slice():[];
+            if(!p.recv){(p.payments||[]).slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(x=>recv.push(x.amount));}
+            while(recv.length<p.months)recv.push(0);
+            return {id:p.id||uid(),item:p.name||'چیز',price:p.price,advance:p.advance,pct:p.pct,months:p.months,start:p.start||'',agreed:p.agreed||0,recv};
+          })}]};
+        }
+      }
+    }
+  }catch(e){}
+  render();
+}
+async function save(){try{await S.set(KEY,JSON.stringify(state))}catch(e){}}
+function toast(msg,label,fn){
+  const t=document.getElementById('toast');t.innerHTML='';t.append(msg);t.style.display='block';
+  if(label){
+    const b=document.createElement('button');b.textContent=label;
+    b.style.cssText='margin-inline-start:14px;border:0;background:transparent;color:inherit;font:inherit;font-weight:700;text-decoration:underline;padding:4px 6px';
+    b.onclick=()=>{fn();t.style.display='none'};t.append(b);
+  }
+  clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',label?6000:1700);
+}
+
+/* ---------- calculations ---------- */
+function calc(p){
+  const bal=Math.max(0,p.price-p.advance);
+  const profit=Math.round(bal*p.pct/100);
+  const total=bal+profit;
+  const m=Math.max(1,p.months);
+  const per=Math.round(total/m);
+  const last=total-per*(m-1);
+  return {bal,profit,total,m,per,last};
+}
+function instAmt(p,i){const c=calc(p);return i===c.m-1?c.last:c.per}
+function monthLabel(p,i){
+  if(!p.start) return 'ماہ '+(i+1);
+  const [y,mo]=p.start.split('-').map(Number);
+  const d=new Date(y,mo-1+i,1);
+  return MONTHS[d.getMonth()]+' '+d.getFullYear();
+}
+function stats(p){
+  const c=calc(p);const recv=p.recv||[];
+  let got=0,count=0;
+  for(let i=0;i<c.m;i++){const v=Number(recv[i])||0;got+=v;if(v>0)count++}
+  const left=c.total-got;
+  const agreed=p.agreed>0?p.agreed:c.per;
+  return {...c,got,left,agreed,count,monthsLeft:left>0?Math.ceil(left/agreed):0};
+}
+function clientStats(c){
+  let total=0,got=0,expect=0;
+  c.deals.forEach(d=>{const s=stats(d);total+=s.total;got+=s.got;if(s.left>0)expect+=Math.min(s.agreed,s.left)});
+  return {total,got,left:total-got,expect};
+}
+function findDeal(id){for(const c of state.clients){const d=c.deals.find(x=>x.id===id);if(d)return d}return null}
+const findClient=id=>state.clients.find(c=>c.id===id);
+
+/* ---------- views ---------- */
+function viewHome(){
+  let total=0,got=0,expect=0,profit=0;
+  state.clients.forEach(c=>{const s=clientStats(c);total+=s.total;got+=s.got;expect+=s.expect;c.deals.forEach(d=>profit+=calc(d).profit)});
+  const left=total-got;
+  let h=`<div class="top"><h1>قسطوں کا حساب</h1></div>
+  <div class="hero"><div class="lbl">کل باقی وصولی</div><div class="big">${fmt(left)}</div>
+    <div class="sub"><div>کل طے شدہ<b>${fmt(total)}</b></div><div>اب تک وصول<b>${fmt(got)}</b></div></div></div>
+  <div class="panel">
+    <div class="row"><span>ہر ماہ متوقع وصولی</span><span class="num">${fmt(expect)}</span></div>
+    <div class="row"><span>کل منافع (طے شدہ)</span><span class="num in">${fmt(profit)}</span></div>
+    <div class="row"><span>گاہک / سودے</span><span class="num">${state.clients.length} / ${state.clients.reduce((a,c)=>a+c.deals.length,0)}</span></div>
+  </div><h2>گاہک</h2><div class="panel">`;
+  if(!state.clients.length) h+=`<div class="empty">ابھی کوئی گاہک نہیں۔<br>نیچے "گاہک" میں نیا گاہک شامل کریں۔</div>`;
+  state.clients.forEach(c=>{
+    const s=clientStats(c);
+    h+=`<button class="item" data-a="opencl" data-v="${c.id}"><span><b>${esc(c.name)}</b><div class="muted">${c.deals.length} سودے</div></span>
+      <span style="text-align:left"><span class="num ${s.left>0?'warn':'in'}">${s.left>0?fmt(s.left):'مکمل ✓'}</span><div class="muted">باقی</div></span></button>
+      <div class="bar"><i style="width:${s.total?Math.min(100,Math.round(s.got/s.total*100)):0}%"></i></div><div style="height:8px"></div>`;
+  });
+  return h+`</div>`;
+}
+
+function viewClients(){
+  let h=`<div class="top"><h1>گاہک</h1></div>
+  <div class="panel"><label for="ncn">نئے گاہک کا نام</label>
+    <input id="ncn" type="text" placeholder="مثلاً: احمد صاحب">
+    <button class="btn" data-a="addclient">گاہک شامل کریں</button></div>`;
+  if(state.clients.length){
+    h+=`<div class="panel">`;
+    state.clients.forEach(c=>{
+      const s=clientStats(c);
+      h+=`<button class="item" data-a="opencl" data-v="${c.id}"><span><b>${esc(c.name)}</b><div class="muted">${c.deals.length} سودے · وصول ${fmt(s.got)}</div></span>
+        <span class="num ${s.left>0?'warn':'in'}">${s.left>0?fmt(s.left):'مکمل ✓'}</span></button><div class="row" style="padding:0"></div>`;
+    });
+    h+=`</div>`;
+  }
+  return h;
+}
+
+function dealBody(p){
+  const s=stats(p);
+  const pr=s.total?Math.min(100,Math.round(s.got/s.total*100)):0;
+  const yr=new Date().getFullYear();
+  const [sy,sm]=p.start?p.start.split('-'):[String(yr),''];
+  let run=s.total;
+  let h=`<div style="margin-top:8px">
+    <label>چیز کا نام</label><input data-f="item" data-id="${p.id}" value="${esc(p.item)}">
+    <div class="grid2">
+      <div><label>کل قیمت</label><input data-f="price" data-id="${p.id}" type="number" inputmode="numeric" placeholder="0" value="${p.price||''}"></div>
+      <div><label>پیشگی</label><input data-f="advance" data-id="${p.id}" type="number" inputmode="numeric" placeholder="0" value="${p.advance||''}"></div>
+      <div><label>منافع (%)</label><input data-f="pct" data-id="${p.id}" type="number" inputmode="decimal" value="${p.pct}"></div>
+      <div><label>قسطوں کے مہینے</label><input data-f="months" data-id="${p.id}" type="number" inputmode="numeric" value="${p.months}"></div>
+    </div>
+    <div style="margin-top:12px">
+      <div class="row"><span>باقی رقم (قیمت − پیشگی)</span><span class="num">${fmt(s.bal)}</span></div>
+      <div class="row"><span>منافع ${esc(p.pct)}%</span><span class="num">${fmt(s.profit)}</span></div>
+    </div>
+    <div class="calc"><span>قسطوں پر کل (باقی + منافع)</span><b class="num">${fmt(s.total)}</b></div>
+    <div class="row"><span>ماہانہ قسط (حساب سے)</span><span class="num">${fmt(s.per)}</span></div>
+    <label>گاہک جتنی ماہانہ دے گا (ٹک کرنے پر یہی رقم بھر جائے گی)</label>
+    <input data-f="agreed" data-id="${p.id}" type="number" inputmode="numeric" placeholder="${fmt(s.per)}" value="${p.agreed||''}">
+    <label>پہلی قسط کا مہینہ</label>
+    <div class="grid2">
+      <select id="sm-${p.id}" data-s="1" data-id="${p.id}"><option value="">مہینہ چنیں</option>${MONTHS.map((n,i)=>{const v=String(i+1).padStart(2,'0');return `<option value="${v}" ${sm===v?'selected':''}>${n}</option>`}).join('')}</select>
+      <select id="sy-${p.id}" data-s="1" data-id="${p.id}">${[yr-1,yr,yr+1,yr+2].map(y=>`<option value="${y}" ${String(y)===String(sy)?'selected':''}>${y}</option>`).join('')}</select>
+    </div>
+    <h2>ماہ بہ ماہ جدول</h2>
+    <div class="muted" style="margin-bottom:4px">جتنی رقم ملی وہ لکھیں یا ٹک کریں، خود کٹ جائے گی</div>`;
+  for(let i=0;i<s.m;i++){
+    const got=Number((p.recv||[])[i])||0;
+    run-=got;
+    h+=`<div class="paid ${got>0?'done':''}">
+      <input type="checkbox" data-a="tick" data-id="${p.id}" data-i="${i}" ${got>0?'checked':''} aria-label="وصول">
+      <div class="grow"><div>${monthLabel(p,i)}</div><div class="muted">حساب سے <span class="num">${fmt(instAmt(p,i))}</span> · باقی <span class="num">${fmt(Math.max(0,run))}</span></div></div>
+      <input data-r="1" data-id="${p.id}" data-i="${i}" type="number" inputmode="numeric" placeholder="0" value="${got||''}" style="width:108px;direction:ltr;text-align:right;padding:8px 10px">
+    </div>`;
+  }
+  h+=`<div style="margin-top:14px">
+      <div class="row" style="border:0;padding:0"><b>اب تک وصول (${s.count} مہینے)</b><span class="num in">${fmt(s.got)}</span></div>
+      <div class="bar"><i style="width:${pr}%"></i></div>
+      <div class="row" style="border:0"><span>باقی</span><span class="num ${s.left>0?'warn':'in'}">${s.left>0?fmt(s.left):'مکمل ادا ✓'}</span></div>
+      ${s.left>0?`<div class="muted">${fmt(s.agreed)} ماہانہ کے حساب سے تقریباً ${s.monthsLeft} مہینے باقی</div>`:''}
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:8px;margin-top:6px">
+      <button class="link" data-a="report" data-v="${p.id}">رپورٹ / PDF</button>
+      <button class="del" data-a="deldeal" data-v="${p.id}">${ui.confirm===p.id?'دوبارہ دبائیں، حذف ہو جائے گا':'یہ سودا حذف کریں'}</button>
+    </div></div>`;
+  return h;
+}
+
+function viewClient(){
+  const c=findClient(ui.cid);
+  if(!c){ui.tab='clients';return viewClients()}
+  const cs=clientStats(c);
+  let h=`<div class="top"><button class="link" data-a="back">‹ واپس</button><button class="link" data-a="creport" data-v="${c.id}">پورے گاہک کی رپورٹ / PDF</button></div>
+  <div class="panel"><label>گاہک کا نام</label><input data-cf="name" data-id="${c.id}" value="${esc(c.name)}">
+    <div class="row"><span>کل طے</span><span class="num">${fmt(cs.total)}</span></div>
+    <div class="row"><span>وصول</span><span class="num in">${fmt(cs.got)}</span></div>
+    <div class="row"><span>باقی</span><span class="num ${cs.left>0?'warn':'in'}">${cs.left>0?fmt(cs.left):'مکمل ✓'}</span></div></div>
+  <h2>سودے</h2>`;
+  if(!c.deals.length) h+=`<div class="panel"><div class="empty">ابھی کوئی سودا نہیں</div></div>`;
+  c.deals.forEach(d=>{
+    const s=stats(d);const open=ui.open===d.id;
+    h+=`<div class="deal ${open?'open':''}"><button class="item" data-a="toggle" data-v="${d.id}">
+      <span><b>${esc(d.item)}</b><div class="muted">کل ${fmt(s.total)} · ${d.months} ماہ</div></span>
+      <span style="text-align:left"><span class="num ${s.left>0?'warn':'in'}">${s.left>0?fmt(s.left):'مکمل ✓'}</span><div class="muted">${open?'بند کریں':'کھولیں'}</div></span></button>
+      ${open?dealBody(d):''}</div>`;
+  });
+  h+=`<div class="panel"><label for="ndi">نیا سودا: چیز کا نام</label>
+    <input id="ndi" type="text" placeholder="مثلاً: لیپ ٹاپ، گاڑی، بائیک">
+    <button class="btn" data-a="adddeal" data-v="${c.id}">سودا شامل کریں</button></div>
+  <button class="del" data-a="delclient" data-v="${c.id}">${ui.confirm===c.id?'دوبارہ دبائیں، گاہک اور سارے سودے حذف ہو جائیں گے':'یہ گاہک حذف کریں'}</button>`;
+  return h;
+}
+
+function repDeal(c,p){
+  const s=stats(p);let run=s.total;
+  let rows='';
+  for(let i=0;i<s.m;i++){
+    const got=Number((p.recv||[])[i])||0;run-=got;
+    rows+=`<tr><td>${monthLabel(p,i)}</td><td class="num">${fmt(instAmt(p,i))}</td><td class="num">${got?fmt(got):'—'}</td><td class="num">${fmt(Math.max(0,run))}</td></tr>`;
+  }
+  return `<div class="rep-deal"><h2 style="margin-top:0">${esc(p.item)}</h2>
+    <div class="row"><span>کل قیمت</span><span class="num">${fmt(p.price)}</span></div>
+    <div class="row"><span>پیشگی</span><span class="num">${fmt(p.advance)}</span></div>
+    <div class="row"><span>باقی رقم</span><span class="num">${fmt(s.bal)}</span></div>
+    <div class="row"><span>منافع ${esc(p.pct)}%</span><span class="num">${fmt(s.profit)}</span></div>
+    <div class="row"><span><b>قسطوں پر کل</b></span><span class="num"><b>${fmt(s.total)}</b></span></div>
+    <div class="row"><span>قسطیں</span><span class="num">${s.m} ماہ × ${fmt(s.per)}</span></div>
+    <table class="rep"><thead><tr><th>مہینہ</th><th>قسط</th><th>وصول ہوا</th><th>باقی</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="row"><span>اب تک وصول</span><span class="num in">${fmt(s.got)}</span></div>
+    <div class="row"><span><b>باقی</b></span><span class="num warn"><b>${s.left>0?fmt(s.left):'مکمل ادا'}</b></span></div></div>`;
+}
+function viewReport(){
+  const c=findClient(ui.rep.cid);
+  if(!c){ui.rep=null;return viewHome()}
+  const deals=ui.rep.did?c.deals.filter(d=>d.id===ui.rep.did):c.deals;
+  let h=`<div class="top no-print"><button class="link" data-a="repback">‹ واپس</button><button class="btn small" data-a="print">پرنٹ / PDF</button></div>
+  <div class="muted no-print" style="margin-bottom:8px">پرنٹ کھلنے پر "PDF محفوظ کریں" (Save as PDF) چنیں، پھر واٹس ایپ وغیرہ پر بھیج دیں۔</div>
+  <div class="rep-h"><h1>قسطوں کا گوشوارہ</h1><div>گاہک: <b>${esc(c.name)}</b></div><div class="muted">تاریخ: ${today()}</div></div>`;
+  deals.forEach(d=>h+=repDeal(c,d));
+  if(deals.length>1){
+    const cs=clientStats(c);
+    h+=`<div class="calc"><span>کل باقی</span><b class="num">${fmt(cs.left)}</b></div>`;
+  }
+  return h;
+}
+
+function viewBackup(){
+  return `<div class="top"><h1>ڈیٹا کی نقل</h1></div>
+  <div class="panel"><b>نقل بنائیں</b>
+    <div class="muted" style="margin:4px 0 8px">نیچے سارا حساب لکھا ہے۔ "کاپی کریں" دبا کر واٹس ایپ پر اپنے آپ کو (یا نوٹس میں) بھیج کر رکھ لیں۔</div>
+    <textarea id="bk" readonly rows="6">${esc(JSON.stringify(state))}</textarea>
+    <button class="btn" data-a="copybk">کاپی کریں</button></div>
+  <div class="panel"><b>نقل واپس لائیں</b>
+    <div class="muted" style="margin:4px 0 8px">محفوظ کی ہوئی نقل یہاں چسپاں کریں۔ اس سے موجودہ حساب کی جگہ وہ حساب آ جائے گا۔</div>
+    <textarea id="rs" rows="6" placeholder="یہاں چسپاں کریں"></textarea>
+    <button class="btn ghost" data-a="restore">${ui.confirm==='restore'?'دوبارہ دبائیں، موجودہ حساب بدل جائے گا':'واپس لائیں'}</button></div>`;
+}
+
+function render(){
+  const app=document.getElementById('app');
+  const y=window.scrollY;
+  let v;
+  if(ui.rep) v=viewReport();
+  else if(ui.tab==='client') v=viewClient();
+  else if(ui.tab==='clients') v=viewClients();
+  else if(ui.tab==='backup') v=viewBackup();
+  else v=viewHome();
+  app.innerHTML=v;
+  const tabs=[['home','◔','خلاصہ'],['clients','☰','گاہک'],['backup','⤓','نقل']];
+  const act=ui.tab==='client'?'clients':ui.tab;
+  document.getElementById('nav').innerHTML=tabs.map(([k,i,l])=>`<button data-tab="${k}" class="${act===k&&!ui.rep?'on':''}"><span class="ic">${i}</span>${l}</button>`).join('');
+  window.scrollTo(0,y);
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click',e=>{
+  const tb=e.target.closest('[data-tab]');
+  if(tb){ui.tab=tb.dataset.tab;ui.rep=null;ui.confirm=null;render();window.scrollTo(0,0);return}
+  const el=e.target.closest('[data-a]');
+  if(!el) return;
+  const a=el.dataset.a,v=el.dataset.v;
+  if(a==='opencl'){ui.cid=v;ui.tab='client';ui.confirm=null;render();window.scrollTo(0,0)}
+  else if(a==='back'){ui.tab='clients';ui.confirm=null;render();window.scrollTo(0,0)}
+  else if(a==='toggle'){ui.open=ui.open===v?null:v;ui.confirm=null;render()}
+  else if(a==='addclient'){
+    const n=document.getElementById('ncn').value.trim();
+    if(!n){toast('پہلے نام لکھیں');return}
+    const c={id:uid(),name:n,deals:[]};state.clients.push(c);ui.cid=c.id;ui.tab='client';save();render();window.scrollTo(0,0);
+  }
+  else if(a==='adddeal'){
+    const c=findClient(v);const n=document.getElementById('ndi').value.trim();
+    if(!n){toast('چیز کا نام لکھیں');return}
+    const d=newDeal(n);c.deals.push(d);ui.open=d.id;save();render();toast('سودا شامل ہو گیا');
+  }
+  else if(a==='deldeal'){
+    if(ui.confirm===v){
+      const c=state.clients.find(c=>c.deals.some(d=>d.id===v));
+      const i=c.deals.findIndex(d=>d.id===v);const x=c.deals.splice(i,1)[0];ui.confirm=null;ui.open=null;save();render();
+      toast('سودا حذف ہو گیا','واپس',()=>{c.deals.splice(i,0,x);save();render()});
+    }else{ui.confirm=v;render()}
+  }
+  else if(a==='delclient'){
+    if(ui.confirm===v){
+      const i=state.clients.findIndex(c=>c.id===v);const x=state.clients.splice(i,1)[0];ui.confirm=null;ui.tab='clients';save();render();
+      toast('گاہک حذف ہو گیا','واپس',()=>{state.clients.splice(i,0,x);save();render()});
+    }else{ui.confirm=v;render()}
+  }
+  else if(a==='report'){const c=state.clients.find(c=>c.deals.some(d=>d.id===v));ui.rep={cid:c.id,did:v};render();window.scrollTo(0,0)}
+  else if(a==='creport'){ui.rep={cid:v,did:null};render();window.scrollTo(0,0)}
+  else if(a==='repback'){ui.rep=null;render()}
+  else if(a==='copybk'){
+    const ta=document.getElementById('bk');ta.focus();ta.select();ta.setSelectionRange(0,ta.value.length);
+    let ok=false;
+    try{ok=document.execCommand('copy')}catch(err){}
+    if(!ok&&navigator.clipboard){navigator.clipboard.writeText(ta.value).then(()=>toast('کاپی ہو گیا'),()=>toast('متن منتخب ہے، خود کاپی کریں'));return}
+    toast(ok?'کاپی ہو گیا':'متن منتخب ہے، خود کاپی کریں');
+  }
+  else if(a==='restore'){
+    const txt=document.getElementById('rs').value.trim();
+    if(!txt){toast('پہلے نقل چسپاں کریں');return}
+    let obj=null;try{obj=JSON.parse(txt)}catch(err){}
+    if(!obj||!Array.isArray(obj.clients)){toast('یہ درست نقل نہیں لگتی');return}
+    if(ui.confirm!=='restore'){ui.confirm='restore';render();document.getElementById('rs').value=txt;return}
+    state=obj;ui.confirm=null;ui.tab='home';save();render();toast('حساب واپس آ گیا');
+  }
+  else if(a==='print'){
+    try{window.print()}catch(err){toast('پرنٹ نہیں کھل سکا')}
+  }
+});
+document.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.dataset.cf){const c=findClient(t.dataset.id);c.name=t.value.trim()||c.name;save();render();return}
+  if(t.dataset.s){
+    const p=findDeal(t.dataset.id);
+    const m=document.getElementById('sm-'+p.id).value,y=document.getElementById('sy-'+p.id).value;
+    p.start=m?(y+'-'+m):'';save();render();return;
+  }
+  if(t.dataset.r){
+    const p=findDeal(t.dataset.id);p.recv=p.recv||[];
+    p.recv[Number(t.dataset.i)]=Math.max(0,Number(t.value)||0);save();render();return;
+  }
+  if(t.dataset.a==='tick'){
+    const p=findDeal(t.dataset.id);const i=Number(t.dataset.i);p.recv=p.recv||[];
+    if(t.checked){
+      if(!(p.recv[i]>0)){
+        const st=stats(p);
+        let amt=p.agreed>0?p.agreed:instAmt(p,i);
+        if(st.left>0) amt=Math.min(amt,st.left);
+        p.recv[i]=amt;
+      }
+    } else p.recv[i]=0;
+    save();render();return;
+  }
+  if(t.dataset.f){
+    const p=findDeal(t.dataset.id);const f=t.dataset.f;
+    if(f==='item') p.item=t.value.trim()||p.item;
+    else{
+      p[f]=Math.max(0,Number(t.value)||0);
+      if(f==='months'){p.months=Math.max(1,Math.min(60,Math.round(p.months)||1));p.recv=p.recv||[];while(p.recv.length<p.months)p.recv.push(0)}
+    }
+    save();render();return;
+  }
+});
+load();
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}
+</script>
+</body>
+</html>
