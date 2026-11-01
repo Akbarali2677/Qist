@@ -93,6 +93,7 @@ textarea{font-size:13px;direction:ltr;text-align:left;font-family:monospace}
 .nl2{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:2px 0}
 .sg{display:flex;justify-content:space-between;gap:10px;margin:14px 0}
 .wm{position:fixed;top:38%;left:0;right:0;text-align:center;transform:rotate(-28deg);font-size:46px;font-weight:700;opacity:.07;pointer-events:none;z-index:0;white-space:nowrap}
+nav button{font-size:12px}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 @media print{
@@ -100,7 +101,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   nav,.no-print,.toast{display:none!important}
   body{padding:0}.wrap{max-width:none;padding:0}
   .panel{border:0;padding:0}
-  .pb{break-before:page}
+  .pb{break-before:page;page-break-before:always}
+  table.tpl tr{break-inside:avoid}
 }
 </style>
 </head>
@@ -360,6 +362,8 @@ function dealBody(p){
     ${p.rnd>0&&s.m>1?`<div class="muted">${s.m-1} ماہ × ${fmt(s.per)} اور آخری قسط ${fmt(s.last)}</div>`:''}
     <label>گاہک جتنی ماہانہ دے گا (ٹک کرنے پر یہی رقم بھر جائے گی)</label>
     <input data-f="agreed" data-id="${p.id}" type="number" inputmode="numeric" placeholder="${fmt(s.per)}" value="${p.agreed||''}">
+    <label>یہ سودا کس کے پیسے سے</label>
+    <select data-fsel="inv" data-id="${p.id}"><option value="">میرا اپنا پیسہ</option>${INVS().map(v=>`<option value="${v.id}" ${p.inv===v.id?'selected':''}>${esc(v.name)}</option>`).join('')}</select>
     <label>پہلی قسط کا مہینہ</label>
     <div class="grid2">
       <select id="sm-${p.id}" data-s="1" data-id="${p.id}"><option value="">مہینہ چنیں</option>${MONTHS.map((n,i)=>{const v=String(i+1).padStart(2,'0');return `<option value="${v}" ${sm===v?'selected':''}>${n}</option>`}).join('')}</select>
@@ -387,6 +391,11 @@ function dealBody(p){
       <div><label>تاریخ</label><input data-f="namaDate" data-id="${p.id}" type="date" value="${p.namaDate||today()}"></div>
       <div><label>گواہ 1 (خالی = ترتیب والا)</label><input data-f="w1" data-id="${p.id}" value="${esc(p.w1||'')}"></div>
       <div><label>گواہ 2</label><input data-f="w2" data-id="${p.id}" value="${esc(p.w2||'')}"></div></div>
+      <label class="paid" style="margin:10px 0 0;color:var(--ink);font-size:17px"><input type="checkbox" data-fb="agentOn" data-id="${p.id}" ${p.agentOn?'checked':''}><span class="grow">اس سودے میں وکیل ہے</span></label>
+      ${p.agentOn?`<div class="muted">خالی چھوڑیں تو ترتیب والا وکیل آئے گا</div><div class="grid2">
+        <div><label>وکیل کا نام</label><input data-f="agName" data-id="${p.id}" value="${esc(p.agName||'')}" placeholder="${esc(CFG().agentName)}"></div>
+        <div><label>شناختی کارڈ</label><input data-f="agCnic" data-id="${p.id}" value="${esc(p.agCnic||'')}" placeholder="${esc(CFG().agentCnic)}" style="direction:ltr;text-align:right"></div>
+        <div><label>موبائل</label><input data-f="agPhone" data-id="${p.id}" value="${esc(p.agPhone||'')}" placeholder="${esc(CFG().agentPhone)}" style="direction:ltr;text-align:right"></div></div>`:''}
       <button class="btn" data-a="nama" data-v="${p.id}">قسط نامہ بنائیں</button></div>
     <div style="display:flex;justify-content:space-between;gap:8px;margin-top:6px">
       <button class="link" data-a="report" data-v="${p.id}">رپورٹ / PDF</button>
@@ -474,7 +483,11 @@ const TERMS_DEFAULT=`قسط وقت سے پہلے جمع ہونے پر قیمت �
 آخری قسط میں باقی ماندہ رقم مکمل ادا کرنی ہوگی۔
 تنازع کی صورت میں مقامی عدالت کا دائرہ اختیار ہوگا۔
 اگر دو لگاتار قسطیں ادا نہ ہوئیں تو باقی تمام رقم فوراً واجب الادا ہو جائے گی۔`;
-const CFG=()=>Object.assign({firstDay:10-9,dueDay:10,nextBill:1,wm:true,terms:'',sellerName:'',sellerCnic:'',sellerPhone:'',w1:'',w2:''},state.cfg||{});
+const CFG=()=>Object.assign({firstDay:10-9,dueDay:10,nextBill:1,wm:true,terms:'',sellerName:'',sellerCnic:'',sellerPhone:'',w1:'',w2:'',agentName:'',agentCnic:'',agentPhone:'',agentAddr:'',agentTerms:'',invTerms:''},state.cfg||{});
+const AGENT_TERMS_DEFAULT=`مذکورہ وکیل اس سودے میں بیچنے والے کی طرف سے وکیل ہے۔
+اگر خریدار قسطیں ادا نہ کرے تو اس کی ذمہ داری وکیل پر ہوگی۔
+وکیل کو اس کام کا کوئی اضافی معاوضہ نہیں ملے گا۔
+سامان کی ملکیت کے کاغذات وکیل کے پاس رہیں گے۔`;
 const pad3=n=>String(n).padStart(3,'0');
 function dateU(y,m,d,first){return (first&&d===1?'یکم':d)+' '+MONTHS[m-1]+' '+y+'ء'}
 function isoU(iso){const [y,m,d]=iso.split('-').map(Number);return dateU(y,m,d,false)}
@@ -492,6 +505,8 @@ function viewNama(){
   const line=(l,v)=>`<div class="nl"><b>${l}</b> <span dir="auto">${esc(v)}</span></div>`;
   const money=n=>`<span class="num">${fmt(n)}</span> روپے`;
   const terms=((g.terms||'').trim()?g.terms:TERMS_DEFAULT).split('\n').map(x=>x.trim()).filter(Boolean).map(x=>x.replace(/\{due\}/g,Number(g.dueDay)||10));
+  const ag=d.agentOn?{name:d.agName||g.agentName,cnic:d.agCnic||g.agentCnic,phone:d.agPhone||g.agentPhone,addr:g.agentAddr}:null;
+  if(ag)((g.agentTerms||'').trim()?g.agentTerms:AGENT_TERMS_DEFAULT).split('\n').map(x=>x.trim()).filter(Boolean).forEach(x=>terms.push(x));
   const half=Math.ceil(s.m/2);let trs='';
   for(let r=0;r<half;r++){
     const i=r,j=r+half;
@@ -508,6 +523,8 @@ function viewNama(){
   <h3>(1) فریقین کی تفصیل</h3>
   <div class="nl2"><span><b>خریدار:</b> ${esc(c.name)}</span><span><b>شناختی کارڈ نمبر:</b> <span class="num">${esc(c.cnic||'')}</span></span></div>
   <div class="nl2"><span><b>بیچنے والا:</b> ${esc(g.sellerName)}</span><span><b>شناختی کارڈ نمبر:</b> <span class="num">${esc(g.sellerCnic)}</span></span></div>
+  ${ag?`<div class="nl2"><span><b>وکیل:</b> ${esc(ag.name)}</span><span><b>شناختی کارڈ نمبر:</b> <span class="num">${esc(ag.cnic)}</span></span></div>
+  <div class="nl2"><span><b>موبائل نمبر:</b> <span class="num">${esc(ag.phone)}</span></span>${ag.addr?`<span><b>پتہ:</b> ${esc(ag.addr)}</span>`:''}</div>`:''}
   <h3>(2) سامان کی تفصیل</h3>
   <table class="tpl"><tbody>${trow('چیز',d.item)}${trow('برانڈ',f.brand||'')}${trow('ماڈل',f.model||'')}${trow('رنگ',f.color||'')}${trow('فریم / چیسس نمبر',f.chassis||'')}${trow('موٹر نمبر',f.motor||'')}</tbody></table>
   <h3>(3) مالی تفصیل</h3>
@@ -522,7 +539,7 @@ function viewNama(){
   <table class="tpl sch"><thead><tr><th>شمار</th><th>تاریخ ادائیگی</th><th>رقم/روپے</th><th>شمار</th><th>تاریخ ادائیگی</th><th>رقم/روپے</th></tr></thead><tbody>${trs}</tbody></table>
   <h3>(6) شرائط و ضوابط</h3>
   ${terms.map((t,i)=>`<div class="nl">(${i+1}) ${esc(t)}</div>`).join('')}
-  <div style="margin-top:18px">${sig('خریدار:',c.name)}${sig('بیچنے والا:',g.sellerName)}${sig('گواہ نمبر 1:',w1)}${sig('گواہ نمبر 2:',w2)}</div></div>
+  <div style="margin-top:18px">${sig('خریدار:',c.name)}${sig('بیچنے والا:',g.sellerName)}${ag?sig('وکیل:',ag.name):''}${sig('گواہ نمبر 1:',w1)}${sig('گواہ نمبر 2:',w2)}</div></div>
   </div>`;
 }
 function viewSet(){
@@ -536,11 +553,148 @@ function viewSet(){
   <div class="panel"><b>تاریخیں اور بل نمبر</b>
     <div class="grid2"><div>${inp('firstDay','قسط ہر ماہ کی تاریخ (جیسے 1)','type="number" inputmode="numeric"')}</div><div>${inp('dueDay','آخری تاریخ (جیسے 10)','type="number" inputmode="numeric"')}</div></div>
     ${inp('nextBill','اگلا بل نمبر','type="number" inputmode="numeric"')}</div>
+  <div class="panel"><b>سرمایہ کاری معاہدے کی شرائط</b><div class="muted">ہر سطر ایک شرط۔ حصے کی جگہ {pct} اور وقفے کی جگہ {every} لکھیں۔ خالی ہو تو یہ آئیں گی۔</div>
+    <textarea data-cfg="invTerms" rows="7" placeholder="${esc(INV_TERMS_DEFAULT)}">${esc(g.invTerms||'')}</textarea></div>
+  <div class="panel"><b>وکیل (عام طور پر)</b><div class="muted">جس شوروم یا شخص کے ذریعے سودا ہو۔ ہر قسط نامے میں ٹک سے آن یا آف کریں۔</div>
+    ${inp('agentName','وکیل کا نام')}${inp('agentCnic','شناختی کارڈ نمبر','inputmode="numeric" style="direction:ltr;text-align:right"')}${inp('agentPhone','موبائل نمبر','inputmode="tel" style="direction:ltr;text-align:right"')}${inp('agentAddr','پتہ / شوروم (اختیاری)')}
+    <label>وکیل کی شرائط (ہر سطر ایک شرط، خالی ہو تو یہ آئیں گی)</label>
+    <textarea data-cfg="agentTerms" rows="6" placeholder="${esc(AGENT_TERMS_DEFAULT)}">${esc(g.agentTerms||'')}</textarea></div>
   <div class="panel"><b>شرائط و ضوابط</b><div class="muted">ہر سطر ایک شرط۔ تاریخ کی جگہ {due} لکھیں۔ خالی چھوڑیں تو پرانی شرائط آئیں گی۔</div>
     <textarea data-cfg="terms" rows="9" placeholder="${esc(TERMS_DEFAULT)}">${esc(g.terms||'')}</textarea></div>`;
 }
+
+/* ---------- investors ---------- */
+const INV_TERMS_DEFAULT=`سرمایہ کار نے مذکورہ رقم کاروبار میں لگانے کے لیے کاروبار کرنے والے کے سپرد کی ہے۔
+حاصل شدہ حقیقی نفع میں سے سرمایہ کار کا حصہ {pct}% اور باقی کاروبار کرنے والے کا ہوگا۔
+نفع کا حساب اور تقسیم ہر {every} ماہ بعد ہوگی۔
+نفع نہ ہونے کی صورت میں کسی نفع کی ادائیگی لازم نہیں ہوگی۔
+نقصان کی صورت میں، کاروبار کرنے والے کی کوتاہی کے بغیر، نقصان سرمائے کی حد تک سرمایہ کار برداشت کرے گا۔
+اصل رقم کی واپسی باہمی رضامندی سے طے شدہ طریقے پر ہوگی۔`;
+const INVS=()=>(state.investors=state.investors||[]);
+const findInv=id=>INVS().find(x=>x.id===id);
+function dealProfitMonth(d,ym){
+  const idx=monthIndex(d,ym);if(idx===null||idx<0)return 0;
+  const c=calc(d);if(idx>=c.m||!(c.total>0))return 0;
+  return (Number((d.recv||[])[idx])||0)*c.profit/c.total;
+}
+function invPeriods(inv){
+  const out=[];const every=Math.max(1,Number(inv.every)||1);
+  const startYM=(inv.date||today()).slice(0,7),nowYM=today().slice(0,7);
+  const deals=[];state.clients.forEach(c=>c.deals.forEach(d=>{if(d.inv===inv.id)deals.push(d)}));
+  let k=startYM,guard=0;
+  while(k<=nowYM&&guard++<240){
+    const months=[];for(let i=0;i<every;i++)months.push(shiftM(k,i));
+    let auto=0;deals.forEach(d=>months.forEach(m=>{auto+=dealProfitMonth(d,m)}));auto=Math.round(auto);
+    const mv=(inv.manual||{})[k];const manual=(mv!==undefined&&mv!==null&&mv!=='')?Number(mv):null;
+    const profit=manual!==null?manual:auto;
+    const endYM=months[months.length-1];
+    out.push({key:k,label:every===1?ymLabel(k):ymLabel(k)+' سے '+ymLabel(endYM),auto,manual,profit,share:Math.round(profit*(Number(inv.pct)||0)/100),done:endYM<nowYM});
+    k=shiftM(k,every);
+  }
+  return out;
+}
+function invSum(inv){
+  const per=invPeriods(inv);
+  const shares=per.reduce((a,p)=>a+p.share,0);
+  const paid=(inv.payouts||[]).reduce((a,p)=>a+p.amount,0);
+  const ret=(inv.returns||[]).reduce((a,p)=>a+p.amount,0);
+  const deals=[];state.clients.forEach(c=>c.deals.forEach(d=>{if(d.inv===inv.id)deals.push({c,d})}));
+  return {per,shares,paid,due:shares-paid,ret,capLeft:(Number(inv.amount)||0)-ret,deals};
+}
+function invText(inv){
+  const s=invSum(inv);
+  let t=`السلام علیکم ${inv.name}،\nآپ کی سرمایہ کاری کا حساب (${today()}):\n• لگائی ہوئی رقم: ${fmt(inv.amount)}\n• آپ کا حصہ: ${inv.pct}% نفع\n• اب تک کا حصہ: ${fmt(s.shares)}\n• اب تک ادا: ${fmt(s.paid)}\n• باقی حصہ: ${fmt(Math.max(0,s.due))}\n`;
+  if(s.ret>0)t+=`• واپس کی گئی اصل رقم: ${fmt(s.ret)}\n`;
+  return t+'جزاک اللہ خیراً';
+}
+function viewInvestors(){
+  const list=INVS();
+  let h=`<div class="top"><h1>سرمایہ کار</h1></div>
+  <div class="panel"><label for="nin">نئے سرمایہ کار کا نام</label><input id="nin" type="text" placeholder="نام">
+    <button class="btn" data-a="addinv">شامل کریں</button></div>`;
+  if(!list.length)return h+`<div class="panel"><div class="empty">ابھی کوئی سرمایہ کار نہیں</div></div>`;
+  h+=`<div class="panel">`;
+  list.forEach(inv=>{
+    const s=invSum(inv);
+    h+=`<button class="item" data-a="openinv" data-v="${inv.id}"><span><b>${esc(inv.name)}</b><div class="muted">رقم ${fmt(inv.amount)} · حصہ ${esc(inv.pct)}%</div></span>
+      <span style="text-align:left"><span class="num ${s.due>0?'warn':'in'}">${s.due>0?fmt(s.due):'ادا ✓'}</span><div class="muted">باقی حصہ</div></span></button><div class="row" style="padding:0"></div>`;
+  });
+  return h+`</div>`;
+}
+function viewInvestor(){
+  const inv=findInv(ui.invId);
+  if(!inv){ui.invId=null;return viewInvestors()}
+  const s=invSum(inv);
+  const f=(k,l,extra)=>`<label>${l}</label><input data-iv="${k}" data-id="${inv.id}" value="${esc(inv[k]??'')}" ${extra||''}>`;
+  let h=`<div class="top"><button class="link" data-a="invback">‹ واپس</button></div>
+  <div class="panel">${f('name','سرمایہ کار کا نام')}${f('cnic','شناختی کارڈ نمبر','inputmode="numeric" style="direction:ltr;text-align:right"')}${f('phone','موبائل نمبر','inputmode="tel" style="direction:ltr;text-align:right"')}
+    <div class="grid2"><div>${f('amount','لگائی ہوئی رقم','type="number" inputmode="numeric"')}</div><div>${f('date','تاریخ','type="date"')}</div>
+    <div>${f('pct','سرمایہ کار کا حصہ (%)','type="number" inputmode="decimal"')}</div>
+    <div><label>ادائیگی کا وقفہ</label><select data-iv="every" data-id="${inv.id}">${[[1,'ہر ماہ'],[2,'ہر 2 ماہ'],[3,'ہر 3 ماہ'],[6,'ہر 6 ماہ'],[12,'ہر سال']].map(([v,l])=>`<option value="${v}" ${Number(inv.every)===v?'selected':''}>${l}</option>`).join('')}</select></div></div></div>
+  <div class="panel"><b>خلاصہ</b>
+    <div class="row"><span>لگائی ہوئی رقم</span><span class="num">${fmt(inv.amount)}</span></div>
+    <div class="row"><span>اصل رقم میں سے واپس</span><span class="num">${fmt(s.ret)}</span></div>
+    <div class="row"><span>اصل رقم باقی</span><span class="num">${fmt(s.capLeft)}</span></div>
+    <div class="row"><span>اب تک کا حصہ</span><span class="num">${fmt(s.shares)}</span></div>
+    <div class="row"><span>اب تک ادا کیا</span><span class="num in">${fmt(s.paid)}</span></div>
+    <div class="row"><span><b>باقی حصہ</b></span><span class="num ${s.due>0?'warn':'in'}"><b>${fmt(Math.max(0,s.due))}</b></span></div></div>
+  <div class="panel"><b>جڑے ہوئے سودے</b>${s.deals.length?s.deals.map(x=>`<div class="row"><span>${esc(x.c.name)} — ${esc(x.d.item)}</span></div>`).join(''):'<div class="muted">کوئی سودا نہیں جڑا۔ سودے میں "یہ سودا کس کے پیسے سے" چنیں۔</div>'}</div>
+  <h2>مدتوں کا حساب</h2><div class="muted" style="margin-bottom:6px">کمائی خود نکلتی ہے (وصول ہونے والی قسطوں کے منافع سے)۔ اپنی طرف سے بدلنی ہو تو خانے میں لکھیں، خالی چھوڑیں تو خود والی آئے گی۔</div>`;
+  if(!s.per.length)h+=`<div class="panel"><div class="empty">سرمایہ کاری کی تاریخ آج یا اس سے پہلے ہو تو مدتیں یہاں نظر آئیں گی۔</div></div>`;
+  s.per.forEach(p=>{
+    h+=`<div class="panel"><div class="row" style="border:0;padding-top:0"><b>${p.label}</b><span class="muted">${p.done?'مکمل':'جاری'}</span></div>
+      <div class="row"><span>کمائی</span><input data-ivm="${p.key}" data-id="${inv.id}" type="number" inputmode="numeric" placeholder="${fmt(p.auto)}" value="${p.manual!==null?p.manual:''}" style="width:130px;direction:ltr;text-align:right"></div>
+      <div class="row"><span>سرمایہ کار کا حصہ (${esc(inv.pct)}%)</span><span class="num">${fmt(p.share)}</span></div></div>`;
+  });
+  const list=(arr,kind,title,lbl)=>{
+    let x=`<h2>${title}</h2><div class="panel"><div class="grid2"><div><label>رقم</label><input id="${kind}a" type="number" inputmode="numeric" placeholder="0" style="direction:ltr;text-align:right"></div><div><label>تاریخ</label><input id="${kind}d" type="date" value="${today()}"></div></div>
+      <label>نوٹ (اختیاری)</label><input id="${kind}n" type="text"><button class="btn" data-a="invadd" data-k="${kind}" data-v="${inv.id}">${lbl}</button>`;
+    (arr||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)).forEach(p=>{x+=`<div class="row"><div><span class="num in">${fmt(p.amount)}</span><div class="muted">${p.date}${p.note?' · '+esc(p.note):''}</div></div><button class="del" data-a="invdel" data-k="${kind}" data-id="${inv.id}" data-v="${p.id}">ہٹائیں</button></div>`});
+    return x+`</div>`;
+  };
+  h+=list(inv.payouts,'payouts','حصہ کی ادائیگیاں','حصہ ادا کیا')+list(inv.returns,'returns','اصل رقم کی واپسی','اصل رقم واپس کی');
+  h+=`<div class="panel"><div class="grid2"><button class="btn ghost" style="margin:0" data-a="invrep" data-v="${inv.id}">گوشوارہ / PDF</button><button class="btn ghost" style="margin:0" data-a="invag" data-v="${inv.id}">معاہدہ بنائیں</button></div>
+    <button class="btn" data-a="invmsg" data-v="${inv.id}">حساب کا پیغام کاپی کریں</button></div>
+  <button class="del" data-a="invdelete" data-v="${inv.id}">${ui.confirm===inv.id?'دوبارہ دبائیں، سرمایہ کار حذف ہو جائے گا':'یہ سرمایہ کار حذف کریں'}</button>`;
+  return h;
+}
+function viewInvStatement(){
+  const inv=findInv(ui.rep.iid);if(!inv){ui.rep=null;return viewInvestors()}
+  const s=invSum(inv),g=CFG();
+  const wm=g.wm&&(g.sellerName||g.sellerPhone)?`<div class="wm">${esc(g.sellerName)} ${esc(g.sellerPhone)}</div>`:'';
+  const prow=s.per.map((p,i)=>`<tr><td>${i+1}</td><td>${p.label}</td><td class="num">${fmt(p.profit)}</td><td class="num">${fmt(p.share)}</td></tr>`).join('');
+  const pay=(inv.payouts||[]).slice().sort((a,b)=>a.date.localeCompare(b.date)).map((p,i)=>`<tr><td>${i+1}</td><td>${p.date}</td><td class="num">${fmt(p.amount)}</td><td>${esc(p.note||'')}</td></tr>`).join('');
+  return `<div class="top no-print"><button class="link" data-a="repback">‹ واپس</button><button class="btn small" data-a="print">پرنٹ / PDF</button></div>
+  <div class="muted no-print" style="margin-bottom:8px">پرنٹ کھلنے پر "PDF محفوظ کریں" (Save as PDF) چنیں۔</div>${wm}
+  <div class="nama"><h1 class="nt">سرمایہ کاری کا گوشوارہ</h1><div class="nmeta"><span></span><span>تاریخ: ${isoU(today())}</span></div>
+  <table class="tpl"><tbody>${trow('سرمایہ کار',inv.name)}${trow('شناختی کارڈ نمبر',inv.cnic||'')}${trow('موبائل نمبر',inv.phone||'')}${trow('لگائی ہوئی رقم',fmt(inv.amount))}${trow('سرمایہ لگانے کی تاریخ',inv.date?isoU(inv.date):'')}${trow('سرمایہ کار کا حصہ',inv.pct+'% نفع')}${trow('ادائیگی کا وقفہ',(Number(inv.every)===1?'ہر ماہ':'ہر '+inv.every+' ماہ'))}</tbody></table>
+  <h3>مدتوں کا حساب</h3><table class="tpl sch"><thead><tr><th>شمار</th><th>مدت</th><th>کمائی</th><th>حصہ</th></tr></thead><tbody>${prow}</tbody></table>
+  <h3>ادائیگیاں</h3>${pay?`<table class="tpl sch"><thead><tr><th>شمار</th><th>تاریخ</th><th>رقم</th><th>نوٹ</th></tr></thead><tbody>${pay}</tbody></table>`:'<div class="nl">ابھی کوئی ادائیگی نہیں ہوئی۔</div>'}
+  <table class="tpl" style="margin-top:12px"><tbody>${trow('اب تک کا حصہ',fmt(s.shares))}${trow('اب تک ادا',fmt(s.paid))}${trow('باقی حصہ',fmt(Math.max(0,s.due)))}${s.ret>0?trow('واپس کی گئی اصل رقم',fmt(s.ret)):''}${trow('اصل رقم باقی',fmt(s.capLeft))}</tbody></table></div>`;
+}
+function viewInvAgreement(){
+  const inv=findInv(ui.rep.iid);if(!inv){ui.rep=null;return viewInvestors()}
+  const g=CFG();
+  const wm=g.wm&&(g.sellerName||g.sellerPhone)?`<div class="wm">${esc(g.sellerName)} ${esc(g.sellerPhone)}</div>`:'';
+  const ev=Number(inv.every)||1;
+  const terms=((g.invTerms||'').trim()?g.invTerms:INV_TERMS_DEFAULT).split('\n').map(x=>x.trim()).filter(Boolean).map(x=>x.replace(/\{pct\}/g,inv.pct).replace(/\{every\}/g,ev));
+  const sig=(l,n)=>`<div class="sg"><span><b>${l}</b> ${esc(n||'')}</span><span>دستخط: ______________</span></div>`;
+  return `<div class="top no-print"><button class="link" data-a="repback">‹ واپس</button><button class="btn small" data-a="print">پرنٹ / PDF</button></div>
+  <div class="muted no-print" style="margin-bottom:8px">پرنٹ کھلنے پر "PDF محفوظ کریں" چنیں۔ اسٹامپ پر چھاپنے سے پہلے کسی مفتی صاحب یا وکیل سے متن دکھا لیں۔</div>${wm}
+  <div class="nama"><h1 class="nt">سرمایہ کاری کا معاہدہ</h1><div class="nmeta"><span></span><span>تاریخ: ${isoU(inv.date||today())}</span></div>
+  <h3>(1) فریقین کی تفصیل</h3>
+  <div class="nl2"><span><b>سرمایہ کار:</b> ${esc(inv.name)}</span><span><b>شناختی کارڈ نمبر:</b> <span class="num">${esc(inv.cnic||'')}</span></span></div>
+  <div class="nl2"><span><b>موبائل نمبر:</b> <span class="num">${esc(inv.phone||'')}</span></span></div>
+  <div class="nl2"><span><b>کاروبار کرنے والا:</b> ${esc(g.sellerName)}</span><span><b>شناختی کارڈ نمبر:</b> <span class="num">${esc(g.sellerCnic)}</span></span></div>
+  <h3>(2) سرمایہ کی تفصیل</h3>
+  <table class="tpl"><tbody>${trow('سرمایہ کی رقم',fmt(inv.amount)+' روپے')}${trow('تاریخ',inv.date?isoU(inv.date):'')}${trow('سرمایہ کار کا حصہ',inv.pct+'% حقیقی نفع')}${trow('نفع کی تقسیم',ev===1?'ہر ماہ':'ہر '+ev+' ماہ بعد')}</tbody></table>
+  <h3>(3) شرائط و ضوابط</h3>${terms.map((t,i)=>`<div class="nl">(${i+1}) ${esc(t)}</div>`).join('')}
+  <div style="margin-top:18px">${sig('سرمایہ کار:',inv.name)}${sig('کاروبار کرنے والا:',g.sellerName)}${sig('گواہ نمبر 1:',g.w1)}${sig('گواہ نمبر 2:',g.w2)}</div></div>`;
+}
 function viewReport(){
   if(ui.rep.kind==='nama')return viewNama();
+  if(ui.rep.kind==='inv')return viewInvStatement();
+  if(ui.rep.kind==='invag')return viewInvAgreement();
   const c=findClient(ui.rep.cid);
   if(!c){ui.rep=null;return viewHome()}
   const deals=c.deals.filter(d=>(ui.rep.dids||[]).includes(d.id));
@@ -549,7 +703,7 @@ function viewReport(){
   <div class="muted no-print" style="margin-bottom:8px">پرنٹ کھلنے پر "PDF محفوظ کریں" (Save as PDF) چنیں، پھر واٹس ایپ وغیرہ پر بھیج دیں۔</div>
   <button class="btn ghost no-print" data-a="stmt" data-v="${c.id}" style="margin:0 0 12px">حساب کا پیغام کاپی کریں</button>`;
   h+=repFirst(c,deals);
-  deals.forEach((d,i)=>{h+=`<div class="${deals.length>1?'pb':''}">${repAcct(d,i,deals.length>1)}</div>`});
+  deals.forEach((d,i)=>{h+=`<div class="pb" style="break-before:page;page-break-before:always">${repAcct(d,i,deals.length>1)}</div>`});
   return h;
 }
 
@@ -574,10 +728,11 @@ function render(){
   else if(ui.tab==='clients') v=viewClients();
   else if(ui.tab==='collect') v=viewCollect();
   else if(ui.tab==='set') v=viewSet();
+  else if(ui.tab==='inv') v=ui.invId?viewInvestor():viewInvestors();
   else if(ui.tab==='backup') v=viewBackup();
   else v=viewHome();
   app.innerHTML=(ui.fb?`<div class="panel no-print"><b>یہ متن کاپی کریں</b><textarea id="fbt" rows="8" class="mono">${esc(ui.fb)}</textarea><button class="btn ghost" data-a="fbclose">بند کریں</button></div>`:'')+v;
-  const tabs=[['home','◔','خلاصہ'],['collect','₨','وصولی'],['clients','☰','گاہک'],['set','⚙','ترتیب'],['backup','⤓','نقل']];
+  const tabs=[['home','◔','خلاصہ'],['collect','₨','وصولی'],['clients','☰','گاہک'],['inv','◈','سرمایہ کار'],['set','⚙','ترتیب'],['backup','⤓','نقل']];
   const act=ui.tab==='client'?'clients':ui.tab;
   document.getElementById('nav').innerHTML=tabs.map(([k,i,l])=>`<button data-tab="${k}" class="${act===k&&!ui.rep?'on':''}"><span class="ic">${i}</span>${l}</button>`).join('');
   window.scrollTo(0,y);
@@ -586,11 +741,39 @@ function render(){
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
   const tb=e.target.closest('[data-tab]');
-  if(tb){ui.tab=tb.dataset.tab;ui.rep=null;ui.confirm=null;render();window.scrollTo(0,0);return}
+  if(tb){ui.tab=tb.dataset.tab;if(ui.tab==='inv')ui.invId=null;ui.rep=null;ui.confirm=null;render();window.scrollTo(0,0);return}
   const el=e.target.closest('[data-a]');
   if(!el) return;
   const a=el.dataset.a,v=el.dataset.v;
   if(a==='opencl'){ui.cid=v;ui.tab='client';ui.confirm=null;render();window.scrollTo(0,0)}
+  else if(a==='addinv'){
+    const n=document.getElementById('nin').value.trim();if(!n){toast('نام لکھیں');return}
+    const inv={id:uid(),name:n,cnic:'',phone:'',amount:0,date:today(),pct:40,every:1,payouts:[],returns:[],manual:{}};
+    INVS().push(inv);ui.invId=inv.id;save();render();window.scrollTo(0,0)
+  }
+  else if(a==='openinv'){ui.invId=v;ui.confirm=null;render();window.scrollTo(0,0)}
+  else if(a==='invback'){ui.invId=null;ui.confirm=null;render();window.scrollTo(0,0)}
+  else if(a==='invadd'){
+    const k=el.dataset.k;const inv=findInv(v);
+    const amt=Number(document.getElementById(k+'a').value);const dt=document.getElementById(k+'d').value||today();const note=document.getElementById(k+'n').value.trim();
+    if(!(amt>0)){toast('رقم لکھیں');return}
+    inv[k]=inv[k]||[];inv[k].push({id:uid(),amount:amt,date:dt,note});save();render();toast('درج ہو گیا');
+  }
+  else if(a==='invdel'){
+    const inv=findInv(el.dataset.id);const k=el.dataset.k;const i=inv[k].findIndex(x=>x.id===v);const x=inv[k].splice(i,1)[0];save();render();
+    toast('ہٹا دیا','واپس',()=>{inv[k].push(x);save();render()});
+  }
+  else if(a==='invdelete'){
+    if(ui.confirm===v){
+      const i=INVS().findIndex(x=>x.id===v);const x=INVS().splice(i,1)[0];
+      state.clients.forEach(c=>c.deals.forEach(d=>{if(d.inv===v)d.inv=''}));
+      ui.confirm=null;ui.invId=null;save();render();
+      toast('سرمایہ کار حذف ہو گیا','واپس',()=>{INVS().splice(i,0,x);save();render()});
+    }else{ui.confirm=v;render()}
+  }
+  else if(a==='invrep'){ui.rep={iid:v,kind:'inv'};render();window.scrollTo(0,0)}
+  else if(a==='invag'){ui.rep={iid:v,kind:'invag'};render();window.scrollTo(0,0)}
+  else if(a==='invmsg'){copyText(invText(findInv(v)))}
   else if(a==='setrnd'){const p=findDeal(el.dataset.id);p.rnd=Number(v)||0;syncMonths(p);save();render()}
   else if(a==='nama'){
     const p=findDeal(v);const c=state.clients.find(x=>x.deals.some(d=>d.id===v));
@@ -686,6 +869,19 @@ document.addEventListener('change',e=>{
     } else p.recv[i]=0;
     save();render();return;
   }
+  if(t.dataset.iv){
+    const inv=findInv(t.dataset.id);const k=t.dataset.iv;
+    inv[k]=['amount','pct','every'].includes(k)?Math.max(0,Number(t.value)||0):t.value.trim();
+    if(k==='every'&&!inv.every)inv.every=1;
+    save();render();return;
+  }
+  if(t.dataset.ivm){
+    const inv=findInv(t.dataset.id);inv.manual=inv.manual||{};
+    if(t.value==='')delete inv.manual[t.dataset.ivm];else inv.manual[t.dataset.ivm]=Number(t.value)||0;
+    save();render();return;
+  }
+  if(t.dataset.fsel){const p=findDeal(t.dataset.id);p[t.dataset.fsel]=t.value;save();render();return}
+  if(t.dataset.fb){const p=findDeal(t.dataset.id);p[t.dataset.fb]=t.checked;save();render();return}
   if(t.dataset.cfg){
     const k=t.dataset.cfg;state.cfg=Object.assign({},state.cfg||{});
     state.cfg[k]=t.type==='checkbox'?t.checked:(['firstDay','dueDay','nextBill'].includes(k)?Math.max(1,Math.round(Number(t.value))||1):t.value.trim());
@@ -694,7 +890,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.f){
     const p=findDeal(t.dataset.id);const f=t.dataset.f;
     if(f==='item') p.item=t.value.trim()||p.item;
-    else if(f==='billNo'||f==='namaDate'||f==='w1'||f==='w2') p[f]=t.value.trim();
+    else if(['billNo','namaDate','w1','w2','agName','agCnic','agPhone'].includes(f)) p[f]=t.value.trim();
     else{
       p[f]=Math.max(0,Number(t.value)||0);
       if(f==='price'||f==='advance'||f==='pct'||f==='rnd') syncMonths(p);
