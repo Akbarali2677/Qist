@@ -97,6 +97,10 @@ nav button{font-size:12px}
 @page land{size:A4 landscape;margin:10mm}
 .land{page:land}
 table.tpl.sm td,table.tpl.sm th{font-size:14px;padding:4px 6px}
+.hseg{display:flex;border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.hseg button{flex:1;padding:10px;border:0;background:var(--surface);color:var(--ink);font:inherit;font-size:16px}
+.hseg button.on{background:var(--accent);color:var(--accent-ink);font-weight:700}
+.sn{display:inline-block;min-width:24px;text-align:center;background:var(--soft);color:var(--accent);border-radius:6px;font-size:13px;font-weight:700;margin-inline-end:6px;padding:0 4px;direction:ltr}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 @media print{
@@ -154,6 +158,7 @@ async function load(){
       }
     }
   }catch(e){}
+  try{state.clients.forEach(c=>c.deals.forEach(d=>syncMonths(d)))}catch(e){}
   render();
 }
 async function save(){try{await S.set(KEY,JSON.stringify(state))}catch(e){}}
@@ -173,7 +178,7 @@ function calc(p){
   const profit=Math.ceil(Number((bal*p.pct/100).toFixed(6)));
   const total=bal+profit;
   let m=Math.max(1,p.months),per=Math.round(total/m);
-  if(p.rnd>0&&total>0){per=p.rnd;m=Math.max(1,Math.ceil(total/per))}
+  if(p.rnd>0&&total>0){per=p.rnd;m=Math.max(1,Math.floor(total/per))}
   if(m===1)per=total;
   const last=total-per*(m-1);
   return {bal,profit,total,m,per,last};
@@ -183,13 +188,11 @@ function syncMonths(p){
 }
 function instAmt(p,i){const c=calc(p);return i===c.m-1?c.last:c.per}
 const rdateOf=(p,i)=>(p.rdate||[])[i]||'';
-const rtoOf=(p,i)=>(p.rto||[])[i]||'me';
-const RCV_N={me:'مجھے',owner:'مالک کو',agent:'وکیل کو'};
 function setRecv(p,i,amt){
-  p.recv=p.recv||[];p.rdate=p.rdate||[];p.rto=p.rto||[];
+  p.recv=p.recv||[];p.rdate=p.rdate||[];
   amt=Math.max(0,Number(amt)||0);p.recv[i]=amt;
-  if(amt>0){if(!p.rdate[i])p.rdate[i]=today();if(!p.rto[i])p.rto[i]='me'}
-  else{p.rdate[i]='';p.rto[i]=''}
+  if(amt>0){if(!p.rdate[i])p.rdate[i]=today()}
+  else{p.rdate[i]=''}
 }
 function monthLabel(p,i){
   if(!p.start) return 'ماہ '+(i+1);
@@ -200,7 +203,7 @@ function monthLabel(p,i){
 function stats(p){
   const c=calc(p);const recv=p.recv||[];
   let got=0,count=0;
-  for(let i=0;i<c.m;i++){const v=Number(recv[i])||0;got+=v;if(v>0)count++}
+  for(let i=0;i<recv.length;i++){const v=Number(recv[i])||0;got+=v;if(v>0&&i<c.m)count++}
   const left=c.total-got;
   const agreed=p.agreed>0?p.agreed:c.per;
   return {...c,got,left,agreed,count,monthsLeft:left>0?Math.ceil(left/agreed):0};
@@ -271,26 +274,86 @@ function copyText(text){
 }
 
 /* ---------- views ---------- */
+function pairsStats(pairs){
+  const ym=today().slice(0,7);let total=0,got=0,ex=0;
+  pairs.forEach(({d})=>{const s=stats(d);total+=s.total;got+=s.got;const di=dueInfo(d,ym);if(di)ex+=Math.min(di.due,di.left)});
+  return {total,got,left:total-got,ex};
+}
 function viewHome(){
-  let total=0,got=0,expect=0,profit=0;
-  state.clients.forEach(c=>{const s=clientStats(c);total+=s.total;got+=s.got;expect+=s.expect;c.deals.forEach(d=>profit+=calc(d).profit)});
-  const left=total-got;
-  let h=`<div class="top"><h1>قسطوں کا حساب</h1></div>
-  <div class="hero"><div class="lbl">کل باقی وصولی</div><div class="big">${fmt(left)}</div>
-    <div class="sub"><div>کل طے شدہ<b>${fmt(total)}</b></div><div>اب تک وصول<b>${fmt(got)}</b></div></div></div>
-  <div class="panel">
-    <div class="row"><span>ہر ماہ متوقع وصولی</span><span class="num">${fmt(expect)}</span></div>
-    <div class="row"><span>کل منافع (طے شدہ)</span><span class="num in">${fmt(profit)}</span></div>
-    <div class="row"><span>گاہک / سودے</span><span class="num">${state.clients.length} / ${state.clients.reduce((a,c)=>a+c.deals.length,0)}</span></div>
-  </div><h2>گاہک</h2><div class="panel">`;
-  if(!state.clients.length) h+=`<div class="empty">ابھی کوئی گاہک نہیں۔<br>نیچے "گاہک" میں نیا گاہک شامل کریں۔</div>`;
-  state.clients.forEach(c=>{
-    const s=clientStats(c);
-    h+=`<button class="item" data-a="opencl" data-v="${c.id}"><span><b>${esc(c.name)}</b><div class="muted">${c.deals.length} سودے</div></span>
-      <span style="text-align:left"><span class="num ${s.left>0?'warn':'in'}">${s.left>0?fmt(s.left):'مکمل ✓'}</span><div class="muted">باقی</div></span></button>
-      <div class="bar"><i style="width:${s.total?Math.min(100,Math.round(s.got/s.total*100)):0}%"></i></div><div style="height:8px"></div>`;
+  const mode=ui.hm||'own',q=(ui.hq||'').trim().toLowerCase();
+  const hit=n=>!q||String(n||'').toLowerCase().includes(q);
+  const seg=`<div class="hseg">${[['own','میرا'],['owners','مالکان'],['inv','سرمایہ کار']].map(([k,l])=>`<button data-a="hm" data-v="${k}" class="${mode===k?'on':''}">${l}</button>`).join('')}</div>`;
+  const srch=`<input data-hq="1" type="search" placeholder="نام سے تلاش" value="${esc(ui.hq||'')}" style="margin-bottom:10px">`;
+  let h=`<div class="top"><h1>خلاصہ</h1></div>${seg}`;
+
+  if(mode==='own'){
+    const own=[];state.clients.forEach((c,ci)=>{const pairs=c.deals.filter(d=>!d.owner).map(d=>({c,d}));if(pairs.length)own.push({c,ci,pairs,st:pairsStats(pairs)})});
+    const all=[].concat(...own.map(x=>x.pairs));const tot=pairsStats(all);
+    let profit=0,gotProfit=0;
+    all.forEach(({d})=>{const s=stats(d);profit+=s.profit;if(s.total>0)gotProfit+=s.got*s.profit/s.total});
+    const shares=INVS().reduce((a,v)=>a+invSum(v).shares,0);
+    h+=`<div class="hero"><div class="lbl">میرا: کل باقی وصولی</div><div class="big">${fmt(tot.left)}</div>
+      <div class="sub"><div>کل طے شدہ<b>${fmt(tot.total)}</b></div><div>اب تک وصول<b>${fmt(tot.got)}</b></div></div></div>
+    <div class="panel">
+      <div class="row"><span>اس مہینے متوقع قسطیں</span><span class="num">${fmt(tot.ex)}</span></div>
+      <div class="row"><span>کل منافع (طے شدہ)</span><span class="num in">${fmt(profit)}</span></div>
+      <div class="row"><span>اب تک وصول شدہ منافع</span><span class="num">${fmt(Math.round(gotProfit))}</span></div>
+      ${shares?`<div class="row"><span>سرمایہ کاروں کا حصہ (اب تک)</span><span class="num out">${fmt(shares)}</span></div>
+      <div class="row"><span><b>میرا منافع (حصہ نکال کر)</b></span><span class="num in"><b>${fmt(Math.round(gotProfit)-shares)}</b></span></div>`:''}
+      <div class="row"><span>گاہک / بائیکیں</span><span class="num">${own.length} / ${all.length}</span></div></div>
+    <h2>میرے گاہک</h2>${own.length>4?srch:''}<div class="panel">`;
+    const list=own.filter(x=>hit(x.c.name));
+    if(!own.length)h+=`<div class="empty">ابھی کوئی گاہک نہیں۔<br>نیچے "گاہک" میں نیا گاہک شامل کریں۔</div>`;
+    else if(!list.length)h+=`<div class="empty">کوئی نام نہیں ملا</div>`;
+    list.forEach(x=>{
+      h+=`<button class="item" data-a="opencl" data-v="${x.c.id}"><span><b><span class="sn">${x.ci+1}</span>${esc(x.c.name)}</b><div class="muted">${x.pairs.length} بائیکیں · اس مہینے ${fmt(x.st.ex)}</div></span>
+        <span style="text-align:left"><span class="num ${x.st.left>0?'warn':'in'}">${x.st.left>0?fmt(x.st.left):'مکمل ✓'}</span><div class="muted">باقی</div></span></button>
+        <div class="bar"><i style="width:${x.st.total?Math.min(100,Math.round(x.st.got/x.st.total*100)):0}%"></i></div><div style="height:8px"></div>`;
+    });
+    return h+`</div>`;
+  }
+
+  if(mode==='owners'){
+    const rows=OWNS().map((o,oi)=>{const pairs=ownerDeals(o.id);return {o,oi,pairs,st:pairsStats(pairs)}});
+    const tot=pairsStats([].concat(...rows.map(r=>r.pairs)));
+    h+=`<div class="hero"><div class="lbl">مالکان: کل باقی وصولی</div><div class="big">${fmt(tot.left)}</div>
+      <div class="sub"><div>کل طے شدہ<b>${fmt(tot.total)}</b></div><div>اب تک وصول<b>${fmt(tot.got)}</b></div></div></div>
+    <div class="panel"><div class="row"><span>اس مہینے متوقع قسطیں</span><span class="num">${fmt(tot.ex)}</span></div>
+      <div class="row"><span>مالکان / بائیکیں</span><span class="num">${rows.length} / ${rows.reduce((a,r)=>a+r.pairs.length,0)}</span></div></div>
+    <h2>ہر مالک کا الگ خلاصہ</h2>${rows.length>4?srch:''}`;
+    const list=rows.filter(r=>hit(r.o.name));
+    if(!rows.length)h+=`<div class="panel"><div class="empty">ابھی کوئی مالک نہیں۔<br>نیچے "سرمایہ کار" ٹیب میں "مالکان" چن کر شامل کریں۔</div></div>`;
+    else if(!list.length)h+=`<div class="panel"><div class="empty">کوئی نام نہیں ملا</div></div>`;
+    list.forEach(r=>{
+      const pc=r.st.total?Math.min(100,Math.round(r.st.got/r.st.total*100)):0;
+      h+=`<div class="panel"><button class="item" data-a="gotoown" data-v="${r.o.id}"><span><b><span class="sn">${r.oi+1}</span>${esc(r.o.name)}</b><div class="muted">${r.pairs.length} بائیکیں</div></span>
+        <span style="text-align:left"><span class="num ${r.st.left>0?'warn':'in'}">${r.st.left>0?fmt(r.st.left):'مکمل ✓'}</span><div class="muted">باقی</div></span></button>
+        <div class="bar"><i style="width:${pc}%"></i></div>
+        <div class="row"><span>قسطوں پر کل</span><span class="num">${fmt(r.st.total)}</span></div>
+        <div class="row"><span>اب تک وصول</span><span class="num in">${fmt(r.st.got)}</span></div>
+        <div class="row" style="border:0"><span>اس مہینے کی قسطیں</span><span class="num">${fmt(r.st.ex)}</span></div></div>`;
+    });
+    return h;
+  }
+
+  const rows=INVS().map((v,vi)=>({v,vi,s:invSum(v)}));
+  const cap=rows.reduce((a,r)=>a+(Number(r.v.amount)||0),0),sh=rows.reduce((a,r)=>a+r.s.shares,0),pd=rows.reduce((a,r)=>a+r.s.paid,0);
+  h+=`<div class="hero"><div class="lbl">سرمایہ کار: باقی حصہ (ادا کرنا ہے)</div><div class="big">${fmt(Math.max(0,sh-pd))}</div>
+    <div class="sub"><div>کل لگائی رقم<b>${fmt(cap)}</b></div><div>اب تک کا حصہ<b>${fmt(sh)}</b></div></div></div>
+  <div class="panel"><div class="row"><span>اب تک ادا کیا</span><span class="num in">${fmt(pd)}</span></div>
+    <div class="row"><span>سرمایہ کار</span><span class="num">${rows.length}</span></div></div>
+  <h2>ہر سرمایہ کار کا الگ خلاصہ</h2>${rows.length>4?srch:''}`;
+  const list=rows.filter(r=>hit(r.v.name));
+  if(!rows.length)h+=`<div class="panel"><div class="empty">ابھی کوئی سرمایہ کار نہیں۔<br>نیچے "سرمایہ کار" ٹیب سے شامل کریں۔</div></div>`;
+  else if(!list.length)h+=`<div class="panel"><div class="empty">کوئی نام نہیں ملا</div></div>`;
+  list.forEach(r=>{
+    h+=`<div class="panel"><button class="item" data-a="gotoinv" data-v="${r.v.id}"><span><b><span class="sn">${r.vi+1}</span>${esc(r.v.name)}</b><div class="muted">حصہ ${esc(r.v.pct)}%</div></span>
+      <span style="text-align:left"><span class="num ${r.s.due>0?'warn':'in'}">${r.s.due>0?fmt(r.s.due):'ادا ✓'}</span><div class="muted">باقی حصہ</div></span></button>
+      <div class="row"><span>لگائی رقم</span><span class="num">${fmt(r.v.amount)}</span></div>
+      <div class="row"><span>اب تک کا حصہ</span><span class="num">${fmt(r.s.shares)}</span></div>
+      <div class="row" style="border:0"><span>اب تک ادا</span><span class="num in">${fmt(r.s.paid)}</span></div></div>`;
   });
-  return h+`</div>`;
+  return h;
 }
 
 function viewCollect(){
@@ -306,11 +369,11 @@ function viewCollect(){
   <div class="hero"><div class="lbl">ابھی وصول ہونا باقی</div><div class="big">${fmt(pend)}</div>
     <div class="sub"><div>اس مہینے کی قسطیں<b>${fmt(due)}</b></div><div>ملا<b>${fmt(got)}</b></div><div>پچھلا بقایا<b>${fmt(arr)}</b></div></div></div>`;
   if(!rows.length) h+=`<div class="panel"><div class="empty">اس مہینے کی کوئی قسط نہیں۔<br>سودے میں "پہلی قسط کا مہینہ" چنا ہو تو یہاں نظر آئے گی۔</div></div>`;
-  rows.forEach(({c,items})=>{
+  rows.forEach(({c,items},ri)=>{
     const cp=items.reduce((a,x)=>a+pendOf(x),0);
     const text=remindText(c,items,ym);
     const wa=waLink(c.phone,text);
-    h+=`<div class="panel"><div class="row" style="border:0;padding-top:0"><b>${esc(c.name)}</b><span class="num ${cp>0?'warn':'in'}">${cp>0?fmt(cp):'ادا ✓'}</span></div>`;
+    h+=`<div class="panel"><div class="row" style="border:0;padding-top:0"><b><span class="sn">${ri+1}</span>${esc(c.name)}</b><span class="num ${cp>0?'warn':'in'}">${cp>0?fmt(cp):'ادا ✓'}</span></div>`;
     items.forEach(x=>{
       const {info:i,d}=x;const done=i.idx!==null&&i.got>0&&i.got>=i.due;
       h+=`<div class="paid ${done?'done':''}">
@@ -334,9 +397,9 @@ function viewClients(){
     <button class="btn" data-a="addclient">گاہک شامل کریں</button></div>`;
   if(state.clients.length){
     h+=`<div class="panel">`;
-    state.clients.forEach(c=>{
+    state.clients.forEach((c,ci)=>{
       const s=clientStats(c);
-      h+=`<button class="item" data-a="opencl" data-v="${c.id}"><span><b>${esc(c.name)}</b><div class="muted">${c.deals.length} سودے · وصول ${fmt(s.got)}</div></span>
+      h+=`<button class="item" data-a="opencl" data-v="${c.id}"><span><b><span class="sn">${ci+1}</span>${esc(c.name)}</b><div class="muted">${c.deals.length} سودے · وصول ${fmt(s.got)}</div></span>
         <span class="num ${s.left>0?'warn':'in'}">${s.left>0?fmt(s.left):'مکمل ✓'}</span></button><div class="row" style="padding:0"></div>`;
     });
     h+=`</div>`;
@@ -370,7 +433,7 @@ function dealBody(p){
     <div class="row"><span>ماہانہ قسط (حساب سے)</span><span class="num">${fmt(s.per)}</span></div>
     <label>گول ماہانہ قسط (اختیاری، مہینے خود بنیں گے)</label>
     <input data-f="rnd" data-id="${p.id}" type="number" inputmode="numeric" placeholder="مثلاً 25000" value="${p.rnd||''}">
-    <div class="chips" style="margin-top:6px">${[1000,500].map(u=>{const v=Math.ceil(Math.max(1,Math.round(s.total/Math.max(1,p.rnd>0?Math.ceil(s.total/p.rnd):p.months)))/u)*u;return `<button data-a="setrnd" data-id="${p.id}" data-v="${v}">${u===1000?'ہزار':'پانچ سو'} کے حساب سے: ${fmt(v)}</button>`}).join('')}${p.rnd>0?`<button data-a="setrnd" data-id="${p.id}" data-v="0">گول ختم کریں</button>`:''}</div>
+    <div class="chips" style="margin-top:6px">${[1000,500].map(u=>{const v=Math.max(u,Math.floor(Math.max(1,Math.round(s.total/Math.max(1,p.rnd>0?s.m:p.months)))/u)*u);return `<button data-a="setrnd" data-id="${p.id}" data-v="${v}">${u===1000?'ہزار':'پانچ سو'} کے حساب سے: ${fmt(v)}</button>`}).join('')}${p.rnd>0?`<button data-a="setrnd" data-id="${p.id}" data-v="0">گول ختم کریں</button>`:''}</div>
     ${p.rnd>0&&s.m>1?`<div class="muted">${s.m-1} ماہ × ${fmt(s.per)} اور آخری قسط ${fmt(s.last)}</div>`:''}
     <label>گاہک جتنی ماہانہ دے گا (ٹک کرنے پر یہی رقم بھر جائے گی)</label>
     <input data-f="agreed" data-id="${p.id}" type="number" inputmode="numeric" placeholder="${fmt(s.per)}" value="${p.agreed||''}">
@@ -393,7 +456,7 @@ function dealBody(p){
     h+=`<div class="paid ${got>0?'done':''}">
       <input type="checkbox" data-a="tick" data-id="${p.id}" data-i="${i}" ${got>0?'checked':''} aria-label="وصول">
       <div class="grow"><div>${monthLabel(p,i)}</div><div class="muted">حساب سے <span class="num">${fmt(instAmt(p,i))}</span> · باقی <span class="num">${fmt(Math.max(0,run))}</span></div>
-        ${got>0?`<div class="muted" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">تاریخ <input type="date" data-rd="${p.id}" data-i="${i}" value="${rdateOf(p,i)}" style="width:150px;padding:4px 8px;font-size:14px">${(p.owner||p.agentOn)?`<select data-rt="${p.id}" data-i="${i}" style="width:auto;padding:4px 8px;font-size:14px"><option value="me" ${rtoOf(p,i)==='me'?'selected':''}>ملا: مجھے</option>${p.owner?`<option value="owner" ${rtoOf(p,i)==='owner'?'selected':''}>ملا: مالک کو</option>`:''}${p.agentOn?`<option value="agent" ${rtoOf(p,i)==='agent'?'selected':''}>ملا: وکیل کو</option>`:''}</select>`:''}</div>`:''}</div>
+        ${got>0?`<div class="muted" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">تاریخ <input type="date" data-rd="${p.id}" data-i="${i}" value="${rdateOf(p,i)}" style="width:150px;padding:4px 8px;font-size:14px"></div>`:''}</div>
       <input data-r="1" data-id="${p.id}" data-i="${i}" type="number" inputmode="numeric" placeholder="0" value="${got||''}" style="width:108px;direction:ltr;text-align:right;padding:8px 10px">
     </div>`;
   }
@@ -438,10 +501,10 @@ function viewClient(){
     <div class="row"><span>باقی</span><span class="num ${cs.left>0?'warn':'in'}">${cs.left>0?fmt(cs.left):'مکمل ✓'}</span></div></div>
   <h2>سودے</h2>`;
   if(!c.deals.length) h+=`<div class="panel"><div class="empty">ابھی کوئی سودا نہیں</div></div>`;
-  c.deals.forEach(d=>{
+  c.deals.forEach((d,di)=>{
     const s=stats(d);const open=ui.open===d.id;
     h+=`<div class="deal ${open?'open':''}"><button class="item" data-a="toggle" data-v="${d.id}">
-      <span><b>${esc(d.item)}</b><div class="muted">کل ${fmt(s.total)} · ${d.months} ماہ</div></span>
+      <span><b><span class="sn">${di+1}</span>${esc(d.item)}</b><div class="muted">کل ${fmt(s.total)} · ${s.m} ماہ</div></span>
       <span style="text-align:left"><span class="num ${s.left>0?'warn':'in'}">${s.left>0?fmt(s.left):'مکمل ✓'}</span><div class="muted">${open?'بند کریں':'کھولیں'}</div></span></button>
       ${open?dealBody(d):''}</div>`;
   });
@@ -488,10 +551,10 @@ function repAcct(p,i,multi){
   const s=stats(p);let run=s.total;let rows='';
   for(let k=0;k<s.m;k++){
     const got=Number((p.recv||[])[k])||0;run-=got;
-    rows+=`<tr><td>${k+1}</td><td>${monthLabel(p,k)}</td><td class="num">${fmt(instAmt(p,k))}</td><td class="num">${got?fmt(got):''}</td><td class="dt">${rdateOf(p,k)?isoU(rdateOf(p,k)):''}</td>${(p.owner||p.agentOn)?`<td>${got?RCV_N[rtoOf(p,k)]||'مجھے':''}</td>`:''}<td class="num">${fmt(Math.max(0,run))}</td></tr>`;
+    rows+=`<tr><td>${k+1}</td><td>${monthLabel(p,k)}</td><td class="num">${fmt(instAmt(p,k))}</td><td class="num">${got?fmt(got):''}</td><td class="dt">${rdateOf(p,k)?isoU(rdateOf(p,k)):''}</td><td class="num">${fmt(Math.max(0,run))}</td></tr>`;
   }
   return `<div class="band">قسطوں کا شیڈول${multi?' — '+esc(p.item):''}</div>
-    <table class="tpl sch"><thead><tr><th>نمبر</th><th>مہینہ</th><th>قسط</th><th>وصول ہوا</th><th>ادائیگی کی تاریخ</th>${(p.owner||p.agentOn)?'<th>کس کو ملا</th>':''}<th>باقی</th></tr></thead><tbody>${rows}</tbody></table>
+    <table class="tpl sch"><thead><tr><th>نمبر</th><th>مہینہ</th><th>قسط</th><th>وصول ہوا</th><th>ادائیگی کی تاریخ</th><th>باقی</th></tr></thead><tbody>${rows}</tbody></table>
     <table class="tpl"><tbody>${trow('کل وصول',fmt(s.got))}${trow('باقی',s.left>0?fmt(s.left):'مکمل ادا')}</tbody></table>`;
 }
 
@@ -631,9 +694,9 @@ function viewInvestors(){
     <button class="btn" data-a="addinv">شامل کریں</button></div>`;
   if(!list.length)return h+`<div class="panel"><div class="empty">ابھی کوئی سرمایہ کار نہیں</div></div>`;
   h+=`<div class="panel">`;
-  list.forEach(inv=>{
+  list.forEach((inv,ii)=>{
     const s=invSum(inv);
-    h+=`<button class="item" data-a="openinv" data-v="${inv.id}"><span><b>${esc(inv.name)}</b><div class="muted">رقم ${fmt(inv.amount)} · حصہ ${esc(inv.pct)}%</div></span>
+    h+=`<button class="item" data-a="openinv" data-v="${inv.id}"><span><b><span class="sn">${ii+1}</span>${esc(inv.name)}</b><div class="muted">رقم ${fmt(inv.amount)} · حصہ ${esc(inv.pct)}%</div></span>
       <span style="text-align:left"><span class="num ${s.due>0?'warn':'in'}">${s.due>0?fmt(s.due):'ادا ✓'}</span><div class="muted">باقی حصہ</div></span></button><div class="row" style="padding:0"></div>`;
   });
   return h+`</div>`;
@@ -716,16 +779,10 @@ function ownerDeals(oid){const out=[];state.clients.forEach(c=>c.deals.forEach(d
 const ownSelOf=o=>{const all=ownerDeals(o.id).map(x=>x.d.id);const sel=(ui.ownSel||{})[o.id];return sel?sel.filter(id=>all.includes(id)):all};
 const PAPER_DEF={details:true,monthly:true,breakdown:false,perbike:false,ledger:true};
 const paperSel=()=>Object.assign({},PAPER_DEF,ui.paper||{});
-function dealRecvSplit(d){
-  const m=calc(d).m;let me=0,ow=0,ag=0;
-  for(let i=0;i<m;i++){const g=Number((d.recv||[])[i])||0;if(!g)continue;const t=rtoOf(d,i);if(t==='owner')ow+=g;else if(t==='agent')ag+=g;else me+=g}
-  return {me,ow,ag};
-}
 function ownSum(o,pairs){
-  let total=0,me=0,ow=0,ag=0;
-  pairs.forEach(x=>{total+=calc(x.d).total;const r=dealRecvSplit(x.d);me+=r.me;ow+=r.ow;ag+=r.ag});
-  const paid=(o.payouts||[]).reduce((a,p)=>a+p.amount,0);
-  return {total,me,ow,ag,got:me+ow+ag,paid,withMe:me-paid,left:total-me-ow-ag};
+  let total=0,got=0;
+  pairs.forEach(x=>{total+=calc(x.d).total;got+=stats(x.d).got});
+  return {total,got,left:total-got};
 }
 function monthlyRows(deals){
   const used=deals.filter(d=>d.start);
@@ -735,21 +792,16 @@ function monthlyRows(deals){
   const total=used.reduce((a,d)=>a+calc(d).total,0);
   const rows=[];let cum=0,guard=0;
   for(let m=first;m<=last&&guard++<600;m=shiftM(m,1)){
-    const per=used.map(d=>{
-      const idx=monthIndex(d,m),c=calc(d);
-      if(idx<0||idx>=c.m)return {due:0,me:0,ow:0,ag:0};
-      const g=Number((d.recv||[])[idx])||0,to=rtoOf(d,idx);
-      return {due:instAmt(d,idx),me:(to!=='owner'&&to!=='agent')?g:0,ow:to==='owner'?g:0,ag:to==='agent'?g:0};
-    });
-    const due=per.reduce((a,x)=>a+x.due,0),me=per.reduce((a,x)=>a+x.me,0),ow=per.reduce((a,x)=>a+x.ow,0),ag=per.reduce((a,x)=>a+x.ag,0);
-    cum+=me+ow+ag;rows.push({m,per,due,me,ow,ag,left:total-cum});
+    const per=used.map(d=>{const idx=monthIndex(d,m),c=calc(d);if(idx<0||idx>=c.m)return {due:0,got:0};return {due:instAmt(d,idx),got:Number((d.recv||[])[idx])||0}});
+    const due=per.reduce((a,x)=>a+x.due,0),got=per.reduce((a,x)=>a+x.got,0);
+    cum+=got;rows.push({m,per,due,got,left:total-cum});
   }
   return {rows,used,skipped:deals.filter(d=>!d.start),total};
 }
 function ownText(o,pairs){
   const sm=ownSum(o,pairs);const ym=today().slice(0,7);
   let due=0;pairs.forEach(x=>{const idx=monthIndex(x.d,ym);if(idx!==null&&idx>=0&&idx<calc(x.d).m)due+=instAmt(x.d,idx)});
-  return `السلام علیکم ${o.name}،\nآپ کی ${pairs.length} بائیکوں کا حساب (${today()}):\n• قسطوں پر کل: ${fmt(sm.total)}\n• اب تک وصول: ${fmt(sm.got)} (مجھے ${fmt(sm.me)}، آپ کو براہِ راست ${fmt(sm.ow)}${sm.ag?`، وکیل کو ${fmt(sm.ag)}`:''})\n• آپ کو دیا گیا: ${fmt(sm.paid)}\n• میرے پاس آپ کا باقی: ${fmt(Math.max(0,sm.withMe))}\n• خریداروں سے ابھی باقی: ${fmt(sm.left)}\n• اس مہینے کی قسطیں: ${fmt(due)}\nجزاک اللہ خیراً`;
+  return `السلام علیکم ${o.name}،\nآپ کی ${pairs.length} بائیکوں کا حساب (${today()}):\n• قسطوں پر کل: ${fmt(sm.total)}\n• اب تک وصول: ${fmt(sm.got)}\n• خریداروں سے ابھی باقی: ${fmt(sm.left)}\n• اس مہینے کی قسطیں: ${fmt(due)}\nجزاک اللہ خیراً`;
 }
 function viewInvTab(){
   const seg=`<div class="seg"><button data-a="invmode" data-v="own" class="${ui.invMode==='own'?'on':''}">مالکان</button><button data-a="invmode" data-v="inv" class="${ui.invMode!=='own'?'on':''}">سرمایہ کار</button></div>`;
@@ -763,9 +815,9 @@ function viewOwners(){
   <div class="panel"><label for="non">نئے مالک کا نام</label><input id="non" type="text" placeholder="مثلاً: محمد فاروق"><button class="btn" data-a="addown">شامل کریں</button></div>`;
   if(!list.length)return h+`<div class="panel"><div class="empty">ابھی کوئی مالک نہیں</div></div>`;
   h+=`<div class="panel">`;
-  list.forEach(o=>{
+  list.forEach((o,oi)=>{
     const pairs=ownerDeals(o.id),sm=ownSum(o,pairs);
-    h+=`<button class="item" data-a="openown" data-v="${o.id}"><span><b>${esc(o.name)}</b><div class="muted">${pairs.length} بائیکیں · کل ${fmt(sm.total)}</div></span>
+    h+=`<button class="item" data-a="openown" data-v="${o.id}"><span><b><span class="sn">${oi+1}</span>${esc(o.name)}</b><div class="muted">${pairs.length} بائیکیں · کل ${fmt(sm.total)}</div></span>
       <span style="text-align:left"><span class="num ${sm.left>0?'warn':'in'}">${sm.left>0?fmt(sm.left):'مکمل ✓'}</span><div class="muted">خریداروں سے باقی</div></span></button><div class="row" style="padding:0"></div>`;
   });
   return h+`</div>`;
@@ -780,30 +832,21 @@ function viewOwner(){
   <div class="panel"><b>خلاصہ (سب بائیکیں)</b>
     <div class="row"><span>قسطوں پر کل</span><span class="num">${fmt(sm.total)}</span></div>
     <div class="row"><span>اب تک وصول</span><span class="num in">${fmt(sm.got)}</span></div>
-    <div class="row"><span>— مجھے ملا</span><span class="num">${fmt(sm.me)}</span></div>
-    <div class="row"><span>— مالک کو براہِ راست ملا</span><span class="num">${fmt(sm.ow)}</span></div>
-    ${sm.ag?`<div class="row"><span>— وکیل کو ملا</span><span class="num">${fmt(sm.ag)}</span></div>`:''}
-    <div class="row"><span>مالک کو میں نے دیا</span><span class="num">${fmt(sm.paid)}</span></div>
-    <div class="row"><span><b>میرے پاس مالک کا باقی</b></span><span class="num ${sm.withMe>0?'warn':'in'}"><b>${fmt(Math.max(0,sm.withMe))}</b></span></div>
     <div class="row"><span>خریداروں سے ابھی باقی</span><span class="num warn">${fmt(sm.left)}</span></div></div>
   <h2>اس مالک کی بائیکیں</h2><div class="muted" style="margin-bottom:4px">رپورٹ میں شامل کرنے کے لیے ٹک کریں۔ بائیک اس مالک کے نام پر سودے کے صفحے سے جڑتی ہے۔</div>
   <div class="panel">`;
   if(!pairs.length)h+=`<div class="empty">ابھی کوئی بائیک نہیں جڑی۔ گاہک ← سودا ← "اس بائیک کا مالک" میں اس کا نام چنیں۔</div>`;
-  pairs.forEach(({c,d})=>{
+  pairs.forEach(({c,d},pi)=>{
     const s=stats(d);
     h+=`<label class="paid" style="margin:0;color:var(--ink);font-size:17px"><input type="checkbox" data-os="${d.id}" ${sel.includes(d.id)?'checked':''}>
-      <span class="grow">${esc(c.name)} — ${esc(d.item)}<div class="muted">${d.source?esc(d.source)+' · ':''}${s.m} ماہ · باقی ${fmt(Math.max(0,s.left))}${d.agentOn?' · وکیل کے ذریعے':''}${d.start?'':' · ⚠ پہلی قسط کا مہینہ نہیں'}</div></span></label>`;
+      <span class="grow"><span class="sn">${pi+1}</span>${esc(c.name)} — ${esc(d.item)}<div class="muted">${d.source?esc(d.source)+' · ':''}${s.m} ماہ · باقی ${fmt(Math.max(0,s.left))}${d.agentOn?' · وکیل کے ذریعے':''}${d.start?'':' · ⚠ پہلی قسط کا مہینہ نہیں'}</div></span></label>`;
   });
   h+=`</div>
   <div class="panel"><b>رپورٹ میں کون سے کاغذات</b>
-    ${[['details','ابتدائی تفصیل (مالک، بائیکیں، خریدار، وکیل)'],['monthly','ماہانہ مجموعی جدول'],['breakdown','ماہانہ جدول میں ہر بائیک کی الگ رقم بھی'],['perbike','ہر بائیک کا الگ شیڈول (تاریخوں کے ساتھ)'],['ledger','وصولی اور مالک کو ادائیگی کا حساب']].map(([k,l])=>`<label class="paid" style="margin:0;color:var(--ink);font-size:16px"><input type="checkbox" data-pp="${k}" ${P[k]?'checked':''}><span class="grow">${l}</span></label>`).join('')}
+    ${[['details','ابتدائی تفصیل (مالک، بائیکیں، خریدار، وکیل)'],['monthly','ماہانہ مجموعی جدول'],['breakdown','ماہانہ جدول میں ہر بائیک کی الگ رقم بھی'],['perbike','ہر بائیک کا الگ شیڈول (تاریخوں کے ساتھ)'],['ledger','وصولی کا ریکارڈ (تاریخوں کے ساتھ)']].map(([k,l])=>`<label class="paid" style="margin:0;color:var(--ink);font-size:16px"><input type="checkbox" data-pp="${k}" ${P[k]?'checked':''}><span class="grow">${l}</span></label>`).join('')}
     <button class="btn" data-a="ownrep" data-v="${o.id}">یکجا رپورٹ / PDF</button>
-    <button class="btn ghost" data-a="ownmsg" data-v="${o.id}">حساب کا پیغام کاپی کریں</button></div>
-  <h2>مالک کو ادائیگی</h2>
-  <div class="panel"><div class="grid2"><div><label>رقم</label><input id="owa" type="number" inputmode="numeric" placeholder="0" style="direction:ltr;text-align:right"></div><div><label>تاریخ</label><input id="owd" type="date" value="${today()}"></div></div>
-    <label>نوٹ (اختیاری)</label><input id="own" type="text"><button class="btn" data-a="owpay" data-v="${o.id}">ادائیگی درج کریں</button>`;
-  (o.payouts||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)).forEach(p=>{h+=`<div class="row"><div><span class="num in">${fmt(p.amount)}</span><div class="muted">${p.date}${p.note?' · '+esc(p.note):''}</div></div><button class="del" data-a="owdel" data-id="${o.id}" data-v="${p.id}">ہٹائیں</button></div>`});
-  h+=`</div><button class="del" data-a="owdelete" data-v="${o.id}">${ui.confirm===o.id?'دوبارہ دبائیں، مالک حذف ہو جائے گا':'یہ مالک حذف کریں'}</button>`;
+    <button class="btn ghost" data-a="ownmsg" data-v="${o.id}">حساب کا پیغام کاپی کریں</button></div>`;
+  h+=`<button class="del" data-a="owdelete" data-v="${o.id}">${ui.confirm===o.id?'دوبارہ دبائیں، مالک حذف ہو جائے گا':'یہ مالک حذف کریں'}</button>`;
   return h;
 }
 const kv4=arr=>{let h='';for(let i=0;i<arr.length;i+=2){const a=arr[i],b=arr[i+1];h+=`<tr><th>${a[0]}</th><td dir="auto">${esc(a[1]??'')}</td>${b?`<th>${b[0]}</th><td dir="auto">${esc(b[1]??'')}</td>`:'<th></th><td></td>'}</tr>`}return h};
@@ -838,11 +881,11 @@ function viewOwnReport(){
     if(!M.rows.length)h+=`<div class="nl">کسی بائیک میں "پہلی قسط کا مہینہ" درج نہیں، اس لیے ماہانہ جدول نہیں بن سکا۔</div>`;
     else{
       if(bd)h+=`<div class="muted" style="margin-bottom:4px">${M.used.map((d,i)=>`${i+1}) ${esc(d.item)}`).join(' &nbsp; ')}</div>`;
-      let tr='',td=0,tm=0,tw=0,ta=0;const hasAg=M.rows.some(r=>r.ag>0);
-      M.rows.forEach((r,k)=>{td+=r.due;tm+=r.me;tw+=r.ow;ta+=r.ag;
-        tr+=`<tr><td>${k+1}</td><td>${ymLabel(r.m)}</td>${bd?r.per.map(x=>`<td class="num">${x.due?fmt(x.due):''}</td>`).join(''):''}<td class="num"><b>${fmt(r.due)}</b></td><td class="num">${r.me?fmt(r.me):''}</td><td class="num">${r.ow?fmt(r.ow):''}</td>${hasAg?`<td class="num">${r.ag?fmt(r.ag):''}</td>`:''}<td class="num">${(r.me+r.ow+r.ag)?fmt(r.me+r.ow+r.ag):''}</td><td class="num">${fmt(Math.max(0,r.left))}</td></tr>`});
-      h+=`<table class="tpl sm sch"><thead><tr><th>نمبر</th><th>مہینہ</th>${bd?M.used.map((d,i)=>`<th>${i+1}</th>`).join(''):''}<th>اس مہینے کی کل قسط</th><th>مجھے ملا</th><th>مالک کو ملا</th>${hasAg?'<th>وکیل کو ملا</th>':''}<th>کل وصول</th><th>بقایا</th></tr></thead><tbody>${tr}
-        <tr><th colspan="${bd?M.used.length+2:2}">میزان</th><th class="num">${fmt(td)}</th><th class="num">${fmt(tm)}</th><th class="num">${fmt(tw)}</th>${hasAg?`<th class="num">${fmt(ta)}</th>`:''}<th class="num">${fmt(tm+tw+ta)}</th><th class="num">${fmt(Math.max(0,M.total-tm-tw-ta))}</th></tr></tbody></table>`;
+      let tr='',td=0,tg=0;
+      M.rows.forEach((r,k)=>{td+=r.due;tg+=r.got;
+        tr+=`<tr><td>${k+1}</td><td>${ymLabel(r.m)}</td>${bd?r.per.map(x=>`<td class="num">${x.due?fmt(x.due):''}</td>`).join(''):''}<td class="num"><b>${fmt(r.due)}</b></td><td class="num">${r.got?fmt(r.got):''}</td><td class="num">${fmt(Math.max(0,r.left))}</td></tr>`});
+      h+=`<table class="tpl sm sch"><thead><tr><th>نمبر</th><th>مہینہ</th>${bd?M.used.map((d,i)=>`<th>${i+1}</th>`).join(''):''}<th>اس مہینے کی کل قسط</th><th>وصول ہوا</th><th>بقایا</th></tr></thead><tbody>${tr}
+        <tr><th colspan="${bd?M.used.length+2:2}">میزان</th><th class="num">${fmt(td)}</th><th class="num">${fmt(tg)}</th><th class="num">${fmt(Math.max(0,M.total-tg))}</th></tr></tbody></table>`;
       if(M.skipped.length)h+=`<div class="muted" style="margin-top:6px">یہ بائیکیں جدول میں شامل نہیں (پہلی قسط کا مہینہ نہیں): ${M.skipped.map(d=>esc(d.item)).join('، ')}</div>`;
     }
     h+=`</div>`;
@@ -851,13 +894,11 @@ function viewOwnReport(){
     pairs.forEach(({c,d})=>{h+=`<div class="pb" style="break-before:page;page-break-before:always"><div class="muted">خریدار: ${esc(c.name)}</div>${repAcct(d,0,true)}</div>`});
   }
   if(P.ledger){
-    const rec=[];pairs.forEach(({c,d})=>{const m=calc(d).m;for(let i=0;i<m;i++){const g2=Number((d.recv||[])[i])||0;if(g2>0)rec.push({date:rdateOf(d,i),who:c.name+' — '+d.item,amt:g2,to:rtoOf(d,i)})}});
+    const rec=[];pairs.forEach(({c,d})=>{const m=calc(d).m;for(let i=0;i<m;i++){const g2=Number((d.recv||[])[i])||0;if(g2>0)rec.push({date:rdateOf(d,i),who:c.name+' — '+d.item,amt:g2})}});
     rec.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
     h+=`<div class="pb" style="break-before:page;page-break-before:always"><h3>وصولی کا ریکارڈ</h3>`+
-      (rec.length?`<table class="tpl sm sch"><thead><tr><th>نمبر</th><th>تاریخ</th><th>بائیک / خریدار</th><th>رقم</th><th>کس کو ملا</th></tr></thead><tbody>${rec.map((r,i)=>`<tr><td>${i+1}</td><td>${r.date?isoU(r.date):''}</td><td>${esc(r.who)}</td><td class="num">${fmt(r.amt)}</td><td>${RCV_N[r.to]||'مجھے'}</td></tr>`).join('')}</tbody></table>`:'<div class="nl">ابھی کوئی وصولی نہیں۔</div>')+
-      `<h3>مالک کو ادائیگیاں</h3>`+
-      ((o.payouts||[]).length?`<table class="tpl sm sch"><thead><tr><th>نمبر</th><th>تاریخ</th><th>رقم</th><th>نوٹ</th></tr></thead><tbody>${(o.payouts||[]).slice().sort((a,b)=>a.date.localeCompare(b.date)).map((p,i)=>`<tr><td>${i+1}</td><td>${isoU(p.date)}</td><td class="num">${fmt(p.amount)}</td><td>${esc(p.note||'')}</td></tr>`).join('')}</tbody></table>`:'<div class="nl">ابھی کوئی ادائیگی نہیں۔</div>')+
-      `<table class="tpl sm" style="margin-top:12px"><tbody>${trow('قسطوں پر کل',fmt(sm.total))}${trow('اب تک کل وصول',fmt(sm.got))}${trow('مجھے ملا',fmt(sm.me))}${trow('مالک کو براہِ راست ملا',fmt(sm.ow))}${sm.ag?trow('وکیل کو ملا',fmt(sm.ag)):''}${trow('مالک کو دیا گیا',fmt(sm.paid))}${trow('میرے پاس مالک کا باقی',fmt(Math.max(0,sm.withMe)))}${trow('خریداروں سے ابھی باقی',fmt(sm.left))}</tbody></table></div>`;
+      (rec.length?`<table class="tpl sm sch"><thead><tr><th>نمبر</th><th>تاریخ</th><th>بائیک / خریدار</th><th>رقم</th></tr></thead><tbody>${rec.map((r,i)=>`<tr><td>${i+1}</td><td>${r.date?isoU(r.date):''}</td><td>${esc(r.who)}</td><td class="num">${fmt(r.amt)}</td></tr>`).join('')}</tbody></table>`:'<div class="nl">ابھی کوئی وصولی نہیں۔</div>')+
+      `<table class="tpl sm" style="margin-top:12px"><tbody>${trow('قسطوں پر کل',fmt(sm.total))}${trow('اب تک کل وصول',fmt(sm.got))}${trow('خریداروں سے ابھی باقی',fmt(sm.left))}</tbody></table></div>`;
   }
   return h+`</div>`;
 }
@@ -917,6 +958,9 @@ document.addEventListener('click',e=>{
   if(!el) return;
   const a=el.dataset.a,v=el.dataset.v;
   if(a==='opencl'){ui.cid=v;ui.tab='client';ui.confirm=null;render();window.scrollTo(0,0)}
+  else if(a==='hm'){ui.hm=v;ui.hq='';render()}
+  else if(a==='gotoown'){ui.tab='inv';ui.invMode='own';ui.ownId=v;ui.rep=null;render();window.scrollTo(0,0)}
+  else if(a==='gotoinv'){ui.tab='inv';ui.invMode='inv';ui.invId=v;ui.rep=null;render();window.scrollTo(0,0)}
   else if(a==='invmode'){ui.invMode=v;ui.invId=null;ui.ownId=null;render()}
   else if(a==='addown'){
     const n=document.getElementById('non').value.trim();if(!n){toast('نام لکھیں');return}
@@ -924,15 +968,6 @@ document.addEventListener('click',e=>{
   }
   else if(a==='openown'){ui.ownId=v;ui.confirm=null;render();window.scrollTo(0,0)}
   else if(a==='ownback'){ui.ownId=null;ui.confirm=null;render();window.scrollTo(0,0)}
-  else if(a==='owpay'){
-    const o=findOwn(v);const amt=Number(document.getElementById('owa').value);const dt=document.getElementById('owd').value||today();const note=document.getElementById('own').value.trim();
-    if(!(amt>0)){toast('رقم لکھیں');return}
-    o.payouts=o.payouts||[];o.payouts.push({id:uid(),amount:amt,date:dt,note});save();render();toast('درج ہو گیا');
-  }
-  else if(a==='owdel'){
-    const o=findOwn(el.dataset.id);const i=o.payouts.findIndex(x=>x.id===v);const x=o.payouts.splice(i,1)[0];save();render();
-    toast('ہٹا دیا','واپس',()=>{o.payouts.push(x);save();render()});
-  }
   else if(a==='owdelete'){
     if(ui.confirm===v){
       const i=OWNS().findIndex(x=>x.id===v);const x=OWNS().splice(i,1)[0];
@@ -1031,6 +1066,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('change',e=>{
   const t=e.target;
+  if(t.dataset.hq){ui.hq=t.value;render();return}
   if(t.dataset.cf){const c=findClient(t.dataset.id);if(t.dataset.cf==='name')c.name=t.value.trim()||c.name;else c[t.dataset.cf]=t.value.trim();save();render();return}
   if(t.dataset.info){const p=findDeal(t.dataset.id);p.info=p.info||{};p.info[t.dataset.info]=t.value.trim();save();return}
   if(t.dataset.rs){
@@ -1038,7 +1074,6 @@ document.addEventListener('change',e=>{
     const cur=repSelOf(c);const i=cur.indexOf(t.dataset.rs);if(i>=0)cur.splice(i,1);else cur.push(t.dataset.rs);ui.repSel[c.id]=cur;render();return;
   }
   if(t.dataset.rd){const p=findDeal(t.dataset.rd);p.rdate=p.rdate||[];p.rdate[Number(t.dataset.i)]=t.value;save();return}
-  if(t.dataset.rt){const p=findDeal(t.dataset.rt);p.rto=p.rto||[];p.rto[Number(t.dataset.i)]=t.value;save();render();return}
   if(t.dataset.ow){const o=findOwn(t.dataset.id);o[t.dataset.ow]=t.value.trim();if(t.dataset.ow==='name'&&!o.name)o.name='مالک';save();render();return}
   if(t.dataset.os){
     const o=state.owners.find(x=>ownerDeals(x.id).some(y=>y.d.id===t.dataset.os));ui.ownSel=ui.ownSel||{};
