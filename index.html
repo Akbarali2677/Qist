@@ -158,7 +158,7 @@ async function load(){
       }
     }
   }catch(e){}
-  try{state.clients.forEach(c=>c.deals.forEach(d=>syncMonths(d)))}catch(e){}
+  try{state.clients.forEach(c=>c.deals.forEach(d=>{if(d.owner&&d.inv)d.inv='';syncMonths(d)}))}catch(e){}
   render();
 }
 async function save(){try{await S.set(KEY,JSON.stringify(state))}catch(e){}}
@@ -455,10 +455,8 @@ function dealBody(p){
     ${p.rnd>0&&s.m<s.want?`<div class="muted warn">اس قسط پر رقم ${s.m} ماہ میں پوری ہو جاتی ہے (آپ نے ${s.want} ماہ لکھے تھے)</div>`:''}
     <label>گاہک جتنی ماہانہ دے گا (ٹک کرنے پر یہی رقم بھر جائے گی)</label>
     <input data-f="agreed" data-id="${p.id}" type="number" inputmode="numeric" placeholder="${fmt(s.per)}" value="${p.agreed||''}">
-    <label>یہ سودا کس کے پیسے سے</label>
-    <select data-fsel="inv" data-id="${p.id}"><option value="">میرا اپنا پیسہ</option>${INVS().map(v=>`<option value="${v.id}" ${p.inv===v.id?'selected':''}>${esc(v.name)}</option>`).join('')}</select>
-    <label>اس بائیک کا مالک (اگر آپ کی اپنی نہیں)</label>
-    <select data-fsel="owner" data-id="${p.id}"><option value="">میری اپنی</option>${OWNS().map(v=>`<option value="${v.id}" ${p.owner===v.id?'selected':''}>${esc(v.name)}</option>`).join('')}</select>
+    <label>یہ بائیک کس کی ہے</label>
+    <select data-fsel="who" data-id="${p.id}"><option value="">میری اپنی</option>${OWNS().length?`<optgroup label="مالکان">${OWNS().map(v=>`<option value="o:${v.id}" ${p.owner===v.id?'selected':''}>${esc(v.name)}</option>`).join('')}</optgroup>`:''}${INVS().length?`<optgroup label="سرمایہ کار">${INVS().map(v=>`<option value="i:${v.id}" ${(p.inv===v.id&&!p.owner)?'selected':''}>${esc(v.name)}</option>`).join('')}</optgroup>`:''}</select>
     <label>کس سے خریدی گئی (بلال یا کوئی اور)</label>
     <input data-f="source" data-id="${p.id}" value="${esc(p.source||'')}">
     <label>پہلی قسط کا مہینہ</label>
@@ -1138,7 +1136,7 @@ document.addEventListener('change',e=>{
     if(t.value==='')delete inv.manual[t.dataset.ivm];else inv.manual[t.dataset.ivm]=Number(t.value)||0;
     save();render();return;
   }
-  if(t.dataset.fsel){const p=findDeal(t.dataset.id);p[t.dataset.fsel]=t.value;save();render();return}
+  if(t.dataset.fsel){const p=findDeal(t.dataset.id);const v=t.value;p.owner=v.startsWith('o:')?v.slice(2):'';p.inv=v.startsWith('i:')?v.slice(2):'';save();render();return}
   if(t.dataset.fb){const p=findDeal(t.dataset.id);p[t.dataset.fb]=t.checked;save();render();return}
   if(t.dataset.cfg){
     const k=t.dataset.cfg;state.cfg=Object.assign({},state.cfg||{});
