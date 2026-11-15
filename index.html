@@ -473,7 +473,7 @@ function dealBody(p){
     run-=got;
     h+=`<div class="paid ${got>0?'done':''}">
       <input type="checkbox" data-a="tick" data-id="${p.id}" data-i="${i}" ${got>0?'checked':''} aria-label="وصول">
-      <div class="grow"><div>${monthLabel(p,i)}</div><div class="muted">حساب سے <span class="num">${fmt(instAmt(p,i))}</span> · باقی <span class="num">${fmt(Math.max(0,run))}</span></div>
+      <div class="grow"><div>${monthLabel(p,i)}</div><div class="muted">طے شدہ <span class="num">${fmt(instAmt(p,i))}</span> · باقی <span class="num">${fmt(Math.max(0,run))}</span></div>
         ${got>0?`<div class="muted" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">تاریخ <input type="date" data-rd="${p.id}" data-i="${i}" value="${rdateOf(p,i)}" style="width:150px;padding:4px 8px;font-size:14px"></div>`:''}</div>
       <input data-r="1" data-id="${p.id}" data-i="${i}" type="number" inputmode="numeric" placeholder="0" value="${got||''}" style="width:108px;direction:ltr;text-align:right;padding:8px 10px">
     </div>`;
@@ -489,6 +489,9 @@ function dealBody(p){
       <div><label>تاریخ</label><input data-f="namaDate" data-id="${p.id}" type="date" value="${p.namaDate||today()}"></div>
       <div><label>گواہ 1 (خالی = ترتیب والا)</label><input data-f="w1" data-id="${p.id}" value="${esc(p.w1||'')}"></div>
       <div><label>گواہ 2</label><input data-f="w2" data-id="${p.id}" value="${esc(p.w2||'')}"></div></div>
+      <label>بیچنے والا</label>
+      <select data-fseller="1" data-id="${p.id}">${(()=>{const sv=p.sellerSel||(p.owner?'o:'+p.owner:'me');const cf=CFG();const sel=sv.startsWith('o:')&&OWNS().find(x=>x.id===sv.slice(2));return `<option value="me" ${!sel?'selected':''}>میں${cf.sellerName?' ('+esc(cf.sellerName)+')':''}</option>`+OWNS().map(v=>`<option value="o:${v.id}" ${sel&&sel.id===v.id?'selected':''}>${esc(v.name)}</option>`).join('')})()}</select>
+      ${(()=>{const sv=p.sellerSel||(p.owner?'o:'+p.owner:'me');const o=sv.startsWith('o:')&&OWNS().find(x=>x.id===sv.slice(2));return o&&(!o.cnic||!o.phone)?'<div class="muted">اس مالک کا شناختی کارڈ یا موبائل خالی ہے، مالکان کے ٹیب میں بھر دیں</div>':''})()}
       <label class="paid" style="margin:10px 0 0;color:var(--ink);font-size:17px"><input type="checkbox" data-fb="agentOn" data-id="${p.id}" ${p.agentOn?'checked':''}><span class="grow">اس سودے میں وکیل ہے</span></label>
       ${p.agentOn?`<div class="muted">خالی چھوڑیں تو ترتیب والا وکیل آئے گا</div><div class="grid2">
         <div><label>وکیل کا نام</label><input data-f="agName" data-id="${p.id}" value="${esc(p.agName||'')}" placeholder="${esc(CFG().agentName)}"></div>
@@ -589,10 +592,16 @@ const AGENT_TERMS_DEFAULT=`مذکورہ وکیل اس سودے میں بیچنے
 const pad3=n=>String(n).padStart(3,'0');
 function dateU(y,m,d,first){return (first&&d===1?'یکم':d)+' '+MONTHS[m-1]+' '+y+'ء'}
 function isoU(iso){const [y,m,d]=iso.split('-').map(Number);return dateU(y,m,d,false)}
+function sellerOf(d){
+  const c=CFG();
+  const sv=d.sellerSel||(d.owner?'o:'+d.owner:'me');
+  if(sv.startsWith('o:')){const o=OWNS().find(x=>x.id===sv.slice(2));if(o)return {sellerName:o.name,sellerCnic:o.cnic||'',sellerPhone:o.phone||''}}
+  return {sellerName:c.sellerName,sellerCnic:c.sellerCnic,sellerPhone:c.sellerPhone};
+}
 function viewNama(){
   const c=findClient(ui.rep.cid);const d=c&&c.deals.find(x=>x.id===(ui.rep.dids||[])[0]);
   if(!d){ui.rep=null;return viewHome()}
-  const g=CFG(),s=stats(d),f=d.info||{};
+  const g=Object.assign(CFG(),sellerOf(d)),s=stats(d),f=d.info||{};
   const blank='________';
   let firstTxt=blank,lastTxt=blank;
   if(d.start){
@@ -1138,6 +1147,7 @@ document.addEventListener('change',e=>{
     if(t.value==='')delete inv.manual[t.dataset.ivm];else inv.manual[t.dataset.ivm]=Number(t.value)||0;
     save();render();return;
   }
+  if(t.dataset.fseller){const p=findDeal(t.dataset.id);p.sellerSel=t.value;save();render();return}
   if(t.dataset.fsel){const p=findDeal(t.dataset.id);const v=t.value;p.owner=v.startsWith('o:')?v.slice(2):'';p.inv=v.startsWith('i:')?v.slice(2):'';save();render();return}
   if(t.dataset.fb){const p=findDeal(t.dataset.id);p[t.dataset.fb]=t.checked;save();render();return}
   if(t.dataset.cfg){
