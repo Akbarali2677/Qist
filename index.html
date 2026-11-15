@@ -182,7 +182,8 @@ function calc(p){
   if(p.rnd>0&&total>0){per=p.rnd;const need=Math.max(1,Math.ceil(total/per));if(need<m)m=need}
   if(m===1)per=total;
   const last=total-per*(m-1);
-  return {bal,profit,total,m,per,last,want};
+  const calcPer=want===1?total:Math.round(total/want);
+  return {bal,profit,total,m,per,last,want,calcPer};
 }
 function syncMonths(p){
   p.recv=p.recv||[];const n=Math.max(Math.round(Number(p.months))||1,calc(p).m);
@@ -447,7 +448,8 @@ function dealBody(p){
       <div class="row"><span>منافع ${esc(p.pct)}%</span><span class="num">${fmt(s.profit)}</span></div>
     </div>
     <div class="calc"><span>قسطوں پر کل (باقی + منافع)</span><b class="num">${fmt(s.total)}</b></div>
-    <div class="row"><span>ماہانہ قسط (حساب سے)</span><span class="num">${fmt(s.per)}</span></div>
+    <div class="row"><span>ماہانہ قسط (حساب سے)</span><span class="num">${fmt(s.calcPer)}</span></div>
+    ${p.rnd>0?`<div class="row"><span>آپ کی طے شدہ ماہانہ قسط</span><span class="num">${fmt(s.per)}</span></div>`:''}
     <label>ماہانہ قسط (اختیاری): اپنی مرضی کی رقم لکھیں یا نیچے سے چنیں</label>
     <input data-f="rnd" data-id="${p.id}" type="number" inputmode="numeric" placeholder="مثلاً 25000" value="${p.rnd||''}">
     <div class="chips" style="margin-top:6px">${[500,1000].map(u=>{const v=nearestRound(p,u);return `<button data-a="setrnd" data-id="${p.id}" data-v="${v}" data-u="${u}" class="${p.rmode===u?'on':''}">${u===500?'پانچ سو':'ہزار'} کے قریب: ${fmt(v)}</button>`}).join('')}${p.rnd>0?`<button data-a="setrnd" data-id="${p.id}" data-v="0">گول ختم کریں</button>`:''}</div>
