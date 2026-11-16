@@ -158,10 +158,73 @@ async function load(){
       }
     }
   }catch(e){}
-  try{state.clients.forEach(c=>c.deals.forEach(d=>{if(d.owner&&d.inv)d.inv='';syncMonths(d)}))}catch(e){}
+  try{state.clients.forEach(c=>c.deals.forEach(d=>{if(d.owner&&d.inv)d.inv='';syncMonths(d)}));trashPurge()}catch(e){}
+  try{const u=await S.get(UKEY);if(u&&u.value){const o=JSON.parse(u.value);if(o&&Array.isArray(o.snaps))UNDO={snaps:o.snaps,daily:Array.isArray(o.daily)?o.daily:[]}}}catch(e){}
+  try{lastJSON=stripJ();lastMeta=metaOf()}catch(e){}
   render();
 }
-async function save(){try{await S.set(KEY,JSON.stringify(state))}catch(e){}}
+const UKEY='qist-hisab-undo',UNDO_CAP=2000000;
+let UNDO={snaps:[],daily:[]},lastJSON=null,lastMeta={c:0,dl:0},lastSnapAt=0;
+function stripJ(){const o=Object.assign({},state);delete o.trash;return JSON.stringify(o)}
+function metaOf(){try{return {c:state.clients.length,dl:state.clients.reduce((a,c)=>a+c.deals.length,0)}}catch(e){return {c:0,dl:0}}}
+function snapPush(j,m,force){
+  const now=Date.now();
+  if(!force&&now-lastSnapAt<60000)return;
+  const top=UNDO.snaps[0];if(top&&top.d===j)return;
+  const dd=new Date(now);
+  const e={t:dd.toISOString(),day:dd.getFullYear()+'-'+(dd.getMonth()+1)+'-'+dd.getDate(),d:j,c:m.c,dl:m.dl};
+  UNDO.snaps.unshift(e);lastSnapAt=now;
+  UNDO.snaps=UNDO.snaps.slice(0,30);
+  if(!UNDO.daily.some(x=>x.day===e.day)){UNDO.daily.unshift(e);UNDO.daily=UNDO.daily.slice(0,14)}
+  const sz=()=>UNDO.snaps.reduce((a,x)=>a+x.d.length,0)+UNDO.daily.reduce((a,x)=>a+x.d.length,0);
+  while(sz()>UNDO_CAP&&UNDO.snaps.length>3)UNDO.snaps.pop();
+  while(sz()>UNDO_CAP&&UNDO.daily.length>2)UNDO.daily.pop();
+  try{Promise.resolve(S.set(UKEY,JSON.stringify(UNDO))).catch(()=>{})}catch(err){}
+}
+function snapRestore(key){
+  const list=key.charAt(0)==='s'?UNDO.snaps:UNDO.daily;
+  const e=list.find(x=>x.t===key.slice(2));if(!e)return;
+  const keepTrash=trashList();
+  snapPush(stripJ(),metaOf(),true);
+  const obj=JSON.parse(e.d);obj.trash=keepTrash;
+  state=obj;lastJSON=stripJ();lastMeta=metaOf();
+  ui.confirm=null;ui.tab='home';save();render();toast('پچھلی حالت واپس آ گئی');
+}
+async function save(){
+  try{const j=stripJ();if(j!==lastJSON){if(lastJSON)snapPush(lastJSON,lastMeta,false);lastJSON=j;lastMeta=metaOf()}}catch(e){}
+  try{await S.set(KEY,JSON.stringify(state))}catch(e){}
+}
+const TRASH_DAYS=60;
+function trashList(){return (state.trash=state.trash||[])}
+function trashPurge(){const lim=Date.now()-TRASH_DAYS*864e5;state.trash=trashList().filter(e=>new Date(e.at).getTime()>lim)}
+function trashAdd(type,label,data,meta){const e={id:uid(),type,label,at:new Date().toISOString(),data,meta:meta||{}};trashList().unshift(e);trashPurge();return e.id}
+function trashDrop(id){state.trash=trashList().filter(e=>e.id!==id)}
+function trashRestore(id,silent){
+  const e=trashList().find(x=>x.id===id);if(!e)return;
+  const m=e.meta||{},dt=e.data;
+  const at=(arr,i)=>Math.min(typeof i==='number'?i:arr.length,arr.length);
+  const say=t=>{if(!silent)toast(t)};
+  if(e.type==='client'){
+    if(state.clients.some(c=>c.id===dt.id)){trashDrop(id);save();render();return}
+    state.clients.splice(at(state.clients,m.i),0,dt);
+  }else if(e.type==='deal'){
+    const c=findClient(m.cid);
+    if(!c){say('پہلے اس کا گاہک ٹوکری سے واپس لائیں');return}
+    if(!c.deals.some(d=>d.id===dt.id))c.deals.splice(at(c.deals,m.i),0,dt);
+  }else if(e.type==='owner'){
+    if(!OWNS().some(o=>o.id===dt.id))OWNS().splice(at(OWNS(),m.i),0,dt);
+    state.clients.forEach(c=>c.deals.forEach(d=>{if((m.links||[]).includes(d.id)&&!d.owner)d.owner=dt.id}));
+  }else if(e.type==='investor'){
+    if(!INVS().some(o=>o.id===dt.id))INVS().splice(at(INVS(),m.i),0,dt);
+    state.clients.forEach(c=>c.deals.forEach(d=>{if((m.links||[]).includes(d.id)&&!d.inv&&!d.owner)d.inv=dt.id}));
+  }else if(e.type==='payout'){
+    const inv=findInv(m.invId);
+    if(!inv){say('پہلے اس کا سرمایہ کار ٹوکری سے واپس لائیں');return}
+    inv[m.k]=inv[m.k]||[];
+    if(!inv[m.k].some(x=>x.id===dt.id))inv[m.k].splice(at(inv[m.k],m.i),0,dt);
+  }
+  trashDrop(id);save();render();say('واپس آ گیا');
+}
 function toast(msg,label,fn){
   const t=document.getElementById('toast');t.innerHTML='';t.append(msg);t.style.display='block';
   if(label){
@@ -397,7 +460,7 @@ function viewCollect(){
       h+=`<div class="paid ${done?'done':''}">
         <input type="checkbox" data-ct="${d.id}" ${done?'checked':''} ${i.idx===null||i.over?'disabled':''} aria-label="وصول">
         <div class="grow"><div>${esc(d.item)}</div>
-        <div class="muted">${i.idx===null?'پہلی قسط کا مہینہ طے نہیں · ':''}${i.over?'مدت پوری، باقی رقم · ':'قسط '}<span class="num">${fmt(i.due)}</span>${i.got?` · ملا <span class="num in">${fmt(i.got)}</span>`:''}${i.arrears>0&&!i.over?` · پچھلا بقایا <span class="num out">${fmt(i.arrears)}</span>`:''} · کل باقی <span class="num">${fmt(i.left)}</span></div></div></div>`;
+        <div class="muted">${i.idx===null?'پہلی قسط کا مہینہ طے نہیں · ':''}${i.over?'مدت پوری، باقی رقم · ':'قسط '}<span class="num">${fmt(i.due)}</span>${i.got?` · ملا <span class="num in">${fmt(i.got)}</span>`:''}${i.arrears>0&&!i.over?` · پچھلا بقایا <span class="num out">${fmt(i.arrears)}</span>`:''} · کل باقی <span class="num">${fmt(i.left)}</span></div>${i.idx!==null&&i.got>0?`<div class="muted" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">تاریخ <input type="date" data-rd="${d.id}" data-i="${i.idx}" value="${rdateOf(d,i.idx)}" style="width:150px;padding:4px 8px;font-size:14px"></div>`:''}</div></div>`;
     });
     if(cp>0){
       h+=`<button class="btn ghost" data-a="remind" data-v="${c.id}">یاددہانی کا پیغام کاپی کریں</button>`;
@@ -955,7 +1018,15 @@ function viewBackup(){
   <div class="panel"><b>نقل واپس لائیں</b>
     <div class="muted" style="margin:4px 0 8px">محفوظ کی ہوئی نقل یہاں چسپاں کریں۔ اس سے موجودہ حساب کی جگہ وہ حساب آ جائے گا۔</div>
     <textarea id="rs" rows="6" placeholder="یہاں چسپاں کریں"></textarea>
-    <button class="btn ghost" data-a="restore">${ui.confirm==='restore'?'دوبارہ دبائیں، موجودہ حساب بدل جائے گا':'واپس لائیں'}</button></div>`;
+    <button class="btn ghost" data-a="restore">${ui.confirm==='restore'?'دوبارہ دبائیں، موجودہ حساب بدل جائے گا':'واپس لائیں'}</button></div>
+  <div class="panel"><b>ٹوکری</b>
+    <div class="muted" style="margin:4px 0 8px">مٹائی ہوئی چیزیں ${TRASH_DAYS} دن تک یہاں رہتی ہیں۔ "واپس لائیں" دبائیں تو چیز اپنی جگہ لوٹ آئے گی۔</div>
+    ${trashList().length?trashList().map(e=>{const d=new Date(e.at);const left=Math.max(0,TRASH_DAYS-Math.floor((Date.now()-d.getTime())/864e5));const T={client:'گاہک',deal:'سودا',owner:'مالک',investor:'سرمایہ کار',payout:'ادائیگی'}[e.type]||'';return `<div class="row" style="align-items:center;gap:8px"><div style="flex:1"><div>${T}: ${esc(e.label)}</div><div class="muted">مٹایا: ${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()} · باقی ${left} دن</div></div><button class="btn ghost" style="width:auto;padding:8px 12px" data-a="trrestore" data-v="${e.id}">واپس لائیں</button></div>`}).join(''):'<div class="muted">ٹوکری خالی ہے۔</div>'}
+  </div>
+  <div class="panel"><b>پچھلی حالتیں</b>
+    <div class="muted" style="margin:4px 0 8px">ایپ کام کے دوران خود حالتیں محفوظ کرتی رہتی ہے۔ کسی وقت پر جانے سے اس کے بعد کا سارا کام واپس ہو جاتا ہے، اس لیے جانے سے پہلے ایپ موجودہ حالت بھی رکھ لیتی ہے۔</div>
+    ${(()=>{const row=(e,k)=>{const d=new Date(e.t);const hh=d.getHours(),mm=String(d.getMinutes()).padStart(2,'0');const key=k+':'+e.t;return `<div class="row" style="align-items:center;gap:8px"><div style="flex:1"><div>${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()} · ${hh}:${mm} سے پہلے</div><div class="muted">گاہک ${e.c} · سودے ${e.dl}</div></div><button class="btn ghost" style="width:auto;padding:8px 12px" data-a="snaprestore" data-v="${key}">${ui.confirm===key?'دوبارہ دبائیں':'اس حالت پر جائیں'}</button></div>`};const a=UNDO.snaps.map(e=>row(e,'s')).join('');const b=UNDO.daily.map(e=>row(e,'d')).join('');return (a?'<div class="muted" style="margin:6px 0">حالیہ حالتیں</div>'+a:'<div class="muted">ابھی کوئی حالت محفوظ نہیں ہوئی۔</div>')+(b?'<div class="muted" style="margin:10px 0 6px">پچھلے دنوں کی حالتیں (روز کی پہلی)</div>'+b:'')})()}
+  </div>`;
 }
 
 function render(){
@@ -998,9 +1069,10 @@ document.addEventListener('click',e=>{
   else if(a==='owdelete'){
     if(ui.confirm===v){
       const i=OWNS().findIndex(x=>x.id===v);const x=OWNS().splice(i,1)[0];
-      state.clients.forEach(c=>c.deals.forEach(d=>{if(d.owner===v)d.owner=''}));
+      const links=[];state.clients.forEach(c=>c.deals.forEach(d=>{if(d.owner===v){links.push(d.id);d.owner=''}}));
+      const tid=trashAdd('owner',x.name,x,{i,links});
       ui.confirm=null;ui.ownId=null;save();render();
-      toast('مالک حذف ہو گیا','واپس',()=>{OWNS().splice(i,0,x);save();render()});
+      toast('مالک حذف ہو گیا (ٹوکری میں ہے)','واپس',()=>trashRestore(tid,true));
     }else{ui.confirm=v;render()}
   }
   else if(a==='ownrep'){const o=findOwn(v);const dids=ownSelOf(o);if(!dids.length){toast('کم از کم ایک بائیک چنیں');return}ui.rep={kind:'own',oid:v,dids,papers:paperSel()};render();window.scrollTo(0,0)}
@@ -1019,15 +1091,17 @@ document.addEventListener('click',e=>{
     inv[k]=inv[k]||[];inv[k].push({id:uid(),amount:amt,date:dt,note});save();render();toast('درج ہو گیا');
   }
   else if(a==='invdel'){
-    const inv=findInv(el.dataset.id);const k=el.dataset.k;const i=inv[k].findIndex(x=>x.id===v);const x=inv[k].splice(i,1)[0];save();render();
-    toast('ہٹا دیا','واپس',()=>{inv[k].push(x);save();render()});
+    const inv=findInv(el.dataset.id);const k=el.dataset.k;const i=inv[k].findIndex(x=>x.id===v);const x=inv[k].splice(i,1)[0];
+    const tid=trashAdd('payout','ادائیگی '+fmt(x.amount)+' · '+inv.name,x,{invId:inv.id,k,i});save();render();
+    toast('ہٹا دیا (ٹوکری میں ہے)','واپس',()=>trashRestore(tid,true));
   }
   else if(a==='invdelete'){
     if(ui.confirm===v){
       const i=INVS().findIndex(x=>x.id===v);const x=INVS().splice(i,1)[0];
-      state.clients.forEach(c=>c.deals.forEach(d=>{if(d.inv===v)d.inv=''}));
+      const links=[];state.clients.forEach(c=>c.deals.forEach(d=>{if(d.inv===v){links.push(d.id);d.inv=''}}));
+      const tid=trashAdd('investor',x.name,x,{i,links});
       ui.confirm=null;ui.invId=null;save();render();
-      toast('سرمایہ کار حذف ہو گیا','واپس',()=>{INVS().splice(i,0,x);save();render()});
+      toast('سرمایہ کار حذف ہو گیا (ٹوکری میں ہے)','واپس',()=>trashRestore(tid,true));
     }else{ui.confirm=v;render()}
   }
   else if(a==='invrep'){ui.rep={iid:v,kind:'inv'};render();window.scrollTo(0,0)}
@@ -1054,14 +1128,18 @@ document.addEventListener('click',e=>{
   else if(a==='deldeal'){
     if(ui.confirm===v){
       const c=state.clients.find(c=>c.deals.some(d=>d.id===v));
-      const i=c.deals.findIndex(d=>d.id===v);const x=c.deals.splice(i,1)[0];ui.confirm=null;ui.open=null;save();render();
-      toast('سودا حذف ہو گیا','واپس',()=>{c.deals.splice(i,0,x);save();render()});
+      const i=c.deals.findIndex(d=>d.id===v);const x=c.deals.splice(i,1)[0];
+      const tid=trashAdd('deal',c.name+' · '+(x.item||'سودا'),x,{cid:c.id,i});
+      ui.confirm=null;ui.open=null;save();render();
+      toast('سودا حذف ہو گیا (ٹوکری میں ہے)','واپس',()=>trashRestore(tid,true));
     }else{ui.confirm=v;render()}
   }
   else if(a==='delclient'){
     if(ui.confirm===v){
-      const i=state.clients.findIndex(c=>c.id===v);const x=state.clients.splice(i,1)[0];ui.confirm=null;ui.tab='clients';save();render();
-      toast('گاہک حذف ہو گیا','واپس',()=>{state.clients.splice(i,0,x);save();render()});
+      const i=state.clients.findIndex(c=>c.id===v);const x=state.clients.splice(i,1)[0];
+      const tid=trashAdd('client',x.name+' ('+x.deals.length+' سودے)',x,{i});
+      ui.confirm=null;ui.tab='clients';save();render();
+      toast('گاہک حذف ہو گیا (ٹوکری میں ہے)','واپس',()=>trashRestore(tid,true));
     }else{ui.confirm=v;render()}
   }
   else if(a==='report'){const c=state.clients.find(c=>c.deals.some(d=>d.id===v));ui.rep={cid:c.id,dids:[v]};render();window.scrollTo(0,0)}
@@ -1087,6 +1165,8 @@ document.addEventListener('click',e=>{
     if(ui.confirm!=='restore'){ui.confirm='restore';render();document.getElementById('rs').value=txt;return}
     state=obj;ui.confirm=null;ui.tab='home';save();render();toast('حساب واپس آ گیا');
   }
+  else if(a==='trrestore'){trashRestore(v)}
+  else if(a==='snaprestore'){if(ui.confirm===v){snapRestore(v)}else{ui.confirm=v;render()}}
   else if(a==='print'){
     try{window.print()}catch(err){toast('پرنٹ نہیں کھل سکا')}
   }
