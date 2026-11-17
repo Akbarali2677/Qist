@@ -360,6 +360,27 @@ function pairsStats(pairs){
   pairs.forEach(({d})=>{const s=stats(d);total+=s.total;got+=s.got;const di=dueInfo(d,ym);if(di)ex+=Math.min(di.due,di.left)});
   return {total,got,left:total-got,ex};
 }
+function monthProfitInfo(all,ym){
+  const nowYM=today().slice(0,7);
+  let recv=0,profit=0;
+  all.forEach(({d})=>{
+    profit+=dealProfitMonth(d,ym);
+    const idx=monthIndex(d,ym);
+    if(idx!==null&&idx>=0&&idx<calc(d).m)recv+=Number((d.recv||[])[idx])||0;
+  });
+  let shares=0;
+  INVS().forEach(v=>{
+    const startYM=(v.date||today()).slice(0,7);
+    if(ym<startYM||ym>nowYM)return;
+    const every=Math.max(1,Number(v.every)||1);
+    const mv=(v.manual||{})[ym];
+    let p;
+    if(every===1&&mv!==undefined&&mv!==null&&mv!=='')p=Number(mv);
+    else{p=0;state.clients.forEach(c=>c.deals.forEach(d=>{if(d.inv===v.id)p+=dealProfitMonth(d,ym)}));p=Math.round(p)}
+    shares+=Math.round(p*(Number(v.pct)||0)/100);
+  });
+  return {recv:Math.round(recv),profit:Math.round(profit),shares,net:Math.round(profit)-shares};
+}
 function viewHome(){
   const mode=ui.hm||'own',q=(ui.hq||'').trim().toLowerCase();
   const hit=n=>!q||String(n||'').toLowerCase().includes(q);
@@ -375,6 +396,13 @@ function viewHome(){
     const shares=INVS().reduce((a,v)=>a+invSum(v).shares,0);
     h+=`<div class="hero"><div class="lbl">میرا: کل باقی وصولی</div><div class="big">${fmt(tot.left)}</div>
       <div class="sub"><div>کل طے شدہ<b>${fmt(tot.total)}</b></div><div>اب تک وصول<b>${fmt(tot.got)}</b></div></div></div>
+    ${(()=>{const pm=ui.pm||today().slice(0,7);const mp=monthProfitInfo(all,pm);const cur=pm===today().slice(0,7);const lb=cur?'اس مہینے':ymLabel(pm);return `<div class=\"panel\">
+      <div class=\"row\" style=\"align-items:center\"><b>ماہانہ منافع</b><span style=\"display:flex;align-items:center;gap:6px\"><button class=\"link\" data-a=\"pmprev\" aria-label=\"پچھلا مہینہ\">›</button><b>${ymLabel(pm)}</b><button class=\"link\" data-a=\"pmnext\" aria-label=\"اگلا مہینہ\">‹</button></span></div>
+      <div class=\"row\"><span>${lb} کی قسطوں کی وصولی</span><span class=\"num\">${fmt(mp.recv)}</span></div>
+      <div class=\"row\"><span>${lb} کا منافع</span><span class=\"num in\">${fmt(mp.profit)}</span></div>
+      ${INVS().length?`<div class=\"row\"><span>سرمایہ کاروں کا حصہ (${lb})</span><span class=\"num out\">${fmt(mp.shares)}</span></div>`:''}
+      <div class=\"row\"><span><b>میرا منافع ${lb} (حصہ نکال کر)</b></span><span class=\"num in\"><b>${fmt(mp.net)}</b></span></div>
+      <div class=\"muted\" style=\"margin-top:6px\">قسط کے مہینے کے حساب سے، یعنی جس مہینے کی قسط ہے، چاہے رقم بعد میں آئے۔</div></div>`})()}
     <div class="panel">
       <div class="row"><span>اس مہینے متوقع قسطیں</span><span class="num">${fmt(tot.ex)}</span></div>
       <div class="row"><span>کل منافع (طے شدہ)</span><span class="num in">${fmt(profit)}</span></div>
@@ -391,7 +419,15 @@ function viewHome(){
         <span style="text-align:left"><span class="num ${x.st.left>0?'warn':'in'}">${x.st.left>0?fmt(x.st.left):'مکمل ✓'}</span><div class="muted">باقی</div></span></button>
         <div class="bar"><i style="width:${x.st.total?Math.min(100,Math.round(x.st.got/x.st.total*100)):0}%"></i></div><div style="height:8px"></div>`;
     });
-    return h+`</div>`;
+    h+=`</div>`;
+    if(own.length){const sel=mySelOf(),P=paperSel();
+      h+=`<div class=\"panel\"><b>یکجا رپورٹ / PDF</b><div class=\"muted\" style=\"margin-bottom:4px\">جن گاہکوں کو شامل کرنا ہو ان پر ٹک کریں</div>
+      ${own.map(x=>`<label class=\"paid\" style=\"margin:0;color:var(--ink);font-size:17px\"><input type=\"checkbox\" data-ms=\"${x.c.id}\" ${sel.includes(x.c.id)?'checked':''}><span class=\"grow\"><span class=\"sn\">${x.ci+1}</span>${esc(x.c.name)}<div class=\"muted\">${x.pairs.length} بائیکیں</div></span></label>`).join('')}
+      <div style=\"height:8px\"></div><b>رپورٹ میں کون سے کاغذات</b>
+      ${[['details','گاہکوں کی تفصیل (نام، شناختی کارڈ، موبائل، بائیکیں)'],['monthly','ماہانہ مجموعی جدول'],['breakdown','ماہانہ جدول میں ہر بائیک کی الگ رقم بھی'],['bikefull','ہر بائیک کی پوری تفصیل (برانڈ، چیسس، وکیل وغیرہ)'],['perbike','ہر بائیک کا الگ شیڈول (تاریخوں کے ساتھ)'],['ledger','وصولی کا ریکارڈ (تاریخوں کے ساتھ)']].map(([k,l])=>`<label class=\"paid\" style=\"margin:0;color:var(--ink);font-size:16px\"><input type=\"checkbox\" data-pp=\"${k}\" ${P[k]?'checked':''}><span class=\"grow\">${l}</span></label>`).join('')}
+      <button class=\"btn\" data-a=\"myrep\">یکجا رپورٹ / PDF دیکھیں</button></div>`;
+    }
+    return h;
   }
 
   if(mode==='owners'){
@@ -677,10 +713,12 @@ function viewNama(){
   const terms=((g.terms||'').trim()?g.terms:TERMS_DEFAULT).split('\n').map(x=>x.trim()).filter(Boolean).map(x=>x.replace(/\{due\}/g,Number(g.dueDay)||10));
   const ag=d.agentOn?{name:d.agName||g.agentName,cnic:d.agCnic||g.agentCnic,phone:d.agPhone||g.agentPhone,addr:g.agentAddr}:null;
   if(ag)((g.agentTerms||'').trim()?g.agentTerms:AGENT_TERMS_DEFAULT).split('\n').map(x=>x.trim()).filter(Boolean).forEach(x=>terms.push(x));
+  const sd=iso=>{const [yy,mm,dd]=iso.split('-').map(Number);return dd+'/'+mm+'/'+yy};
+  const cellN=i=>{const got=Number((d.recv||[])[i])||0;const rd=rdateOf(d,i);const dtv=got>0?(rd?'<span dir="ltr">'+sd(rd)+'</span> ✓':'✓ وصول'):'';return `<td>${i+1}</td><td class="dt">${dtv}</td><td class="num">${fmt(got>0?got:instAmt(d,i))}</td>`};
   const half=Math.ceil(s.m/2);let trs='';
   for(let r=0;r<half;r++){
     const i=r,j=r+half;
-    trs+=`<tr><td>${i+1}</td><td class="dt"></td><td class="num">${fmt(instAmt(d,i))}</td>`+(j<s.m?`<td>${j+1}</td><td class="dt"></td><td class="num">${fmt(instAmt(d,j))}</td>`:`<td></td><td></td><td></td>`)+`</tr>`;
+    trs+=`<tr>${cellN(i)}`+(j<s.m?cellN(j):`<td></td><td></td><td></td>`)+`</tr>`;
   }
   const w1=d.w1||g.w1,w2=d.w2||g.w2;
   const sig=(l,n)=>`<div class="sg"><span><b>${l}</b> ${esc(n||'')}</span><span>دستخط: ______________</span></div>`;
@@ -867,7 +905,8 @@ const OWNS=()=>(state.owners=state.owners||[]);
 const findOwn=id=>OWNS().find(x=>x.id===id);
 function ownerDeals(oid){const out=[];state.clients.forEach(c=>c.deals.forEach(d=>{if(d.owner===oid)out.push({c,d})}));return out}
 const ownSelOf=o=>{const all=ownerDeals(o.id).map(x=>x.d.id);const sel=(ui.ownSel||{})[o.id];return sel?sel.filter(id=>all.includes(id)):all};
-const PAPER_DEF={details:true,monthly:true,breakdown:false,perbike:false,ledger:true};
+const mySelOf=()=>{const all=state.clients.filter(c=>c.deals.some(d=>!d.owner)).map(c=>c.id);return ui.mySel?ui.mySel.filter(id=>all.includes(id)):all};
+const PAPER_DEF={details:true,monthly:true,breakdown:false,perbike:false,ledger:false,bikefull:false};
 const paperSel=()=>Object.assign({},PAPER_DEF,ui.paper||{});
 function ownSum(o,pairs){
   let total=0,got=0;
@@ -933,7 +972,7 @@ function viewOwner(){
   });
   h+=`</div>
   <div class="panel"><b>رپورٹ میں کون سے کاغذات</b>
-    ${[['details','ابتدائی تفصیل (مالک، بائیکیں، خریدار، وکیل)'],['monthly','ماہانہ مجموعی جدول'],['breakdown','ماہانہ جدول میں ہر بائیک کی الگ رقم بھی'],['perbike','ہر بائیک کا الگ شیڈول (تاریخوں کے ساتھ)'],['ledger','وصولی کا ریکارڈ (تاریخوں کے ساتھ)']].map(([k,l])=>`<label class="paid" style="margin:0;color:var(--ink);font-size:16px"><input type="checkbox" data-pp="${k}" ${P[k]?'checked':''}><span class="grow">${l}</span></label>`).join('')}
+    ${[['details','گاہکوں کی تفصیل (نام، شناختی کارڈ، موبائل، بائیکیں)'],['monthly','ماہانہ مجموعی جدول'],['breakdown','ماہانہ جدول میں ہر بائیک کی الگ رقم بھی'],['bikefull','ہر بائیک کی پوری تفصیل (برانڈ، چیسس، وکیل وغیرہ)'],['perbike','ہر بائیک کا الگ شیڈول (تاریخوں کے ساتھ)'],['ledger','وصولی کا ریکارڈ (تاریخوں کے ساتھ)']].map(([k,l])=>`<label class="paid" style="margin:0;color:var(--ink);font-size:16px"><input type="checkbox" data-pp="${k}" ${P[k]?'checked':''}><span class="grow">${l}</span></label>`).join('')}
     <button class="btn" data-a="ownrep" data-v="${o.id}">یکجا رپورٹ / PDF</button>
     <button class="btn ghost" data-a="ownmsg" data-v="${o.id}">حساب کا پیغام کاپی کریں</button></div>`;
   h+=`<button class="del" data-a="owdelete" data-v="${o.id}">${ui.confirm===o.id?'دوبارہ دبائیں، مالک حذف ہو جائے گا':'یہ مالک حذف کریں'}</button>`;
@@ -952,9 +991,70 @@ function viewOwnReport(){
   <table class="tpl sm"><tbody>${kv4([['مالک',o.name],['شناختی کارڈ',o.cnic||''],['موبائل',o.phone||''],['بائیکوں کی تعداد',String(pairs.length)]])}</tbody></table>`;
   const sm=ownSum(o,pairs);
   if(P.details){
-    h+=`<h3>بائیکوں کی فہرست</h3><table class="tpl sm sch"><thead><tr><th>نمبر</th><th>بائیک</th><th>خریدار</th><th>قسطوں پر کل</th><th>مہینے</th><th>ماہانہ</th></tr></thead><tbody>`+
-      pairs.map(({c,d},i)=>{const s=stats(d);const f=d.info||{};return `<tr><td>${i+1}</td><td>${esc([f.brand,f.model].filter(Boolean).join(' ')||d.item)}</td><td>${esc(c.name)}</td><td class="num">${fmt(s.total)}</td><td>${s.m}</td><td class="num">${fmt(s.per)}</td></tr>`}).join('')+
-      `<tr><th colspan="3">میزان</th><th class="num">${fmt(sm.total)}</th><th></th><th></th></tr></tbody></table>`;
+    const grp=[];pairs.forEach(x=>{let g0=grp.find(z=>z.c.id===x.c.id);if(!g0){g0={c:x.c,ds:[]};grp.push(g0)}g0.ds.push(x.d)});
+    h+=`<h3>گاہکوں کی تفصیل</h3>`;
+    grp.forEach((g0,gi)=>{const c=g0.c;
+      h+=`<div class="band">${gi+1}) ${esc(c.name)}</div><table class="tpl sm"><tbody>${kv4([['گاہک کا نام',c.name],['والد کا نام',c.father||''],['شناختی کارڈ نمبر',c.cnic||''],['موبائل نمبر',c.phone||''],['پتہ',c.address||'']])}</tbody></table>`+
+        `<table class="tpl sm sch"><thead><tr><th>نمبر</th><th>بائیک</th><th>قسطوں پر کل</th><th>مہینے</th><th>ماہانہ</th></tr></thead><tbody>${g0.ds.map((d,di)=>{const s2=stats(d);const f2=d.info||{};return `<tr><td>${di+1}</td><td>${esc([f2.brand,f2.model].filter(Boolean).join(' ')||d.item)}</td><td class="num">${fmt(s2.total)}</td><td>${s2.m}</td><td class="num">${fmt(s2.per)}</td></tr>`}).join('')}</tbody></table>`;
+    });
+  }
+  if(P.bikefull){
+    pairs.forEach(({c,d},i)=>{
+      const s=stats(d),f=d.info||{};
+      const ag=d.agentOn?([d.agName||g.agentName,d.agPhone||g.agentPhone].filter(Boolean).join(' · ')||'ہاں'):'نہیں';
+      h+=`<div class="band">${i+1}) ${esc(d.item)} — خریدار: ${esc(c.name)}</div><table class="tpl sm"><tbody>${kv4([
+        ['برانڈ',f.brand],['ماڈل',f.model],['فریم / چیسس نمبر',f.chassis],['موٹر نمبر',f.motor],
+        ['کس سے خریدی',d.source],['خریدار',c.name],['شناختی کارڈ (خریدار)',c.cnic],['موبائل (خریدار)',c.phone],
+        ['وکیل',ag],['کل قیمت',fmt(d.price)],['پیشگی',fmt(d.advance)],['قسطوں پر کل',fmt(s.total)],
+        ['مدت',s.m+' ماہ'],['ماہانہ قسط',fmt(s.per)]])}</tbody></table>`;
+    });
+  }
+  if(P.monthly){
+    const M=monthlyRows(deals),bd=P.breakdown;
+    h+=`<div class="pb${bd?' land':''}" style="break-before:page;page-break-before:always"><h3>ماہانہ مجموعی جدول</h3>`;
+    if(!M.rows.length)h+=`<div class="nl">کسی بائیک میں "پہلی قسط کا مہینہ" درج نہیں، اس لیے ماہانہ جدول نہیں بن سکا۔</div>`;
+    else{
+      if(bd)h+=`<div class="muted" style="margin-bottom:4px">${M.used.map((d,i)=>`${i+1}) ${esc(d.item)}`).join(' &nbsp; ')}</div>`;
+      let tr='',td=0,tg=0;
+      M.rows.forEach((r,k)=>{td+=r.due;tg+=r.got;
+        tr+=`<tr><td>${k+1}</td><td>${ymLabel(r.m)}</td>${bd?r.per.map(x=>`<td class="num">${x.due?fmt(x.due):''}</td>`).join(''):''}<td class="num"><b>${fmt(r.due)}</b></td><td class="num">${r.got?fmt(r.got):''}</td><td class="num">${fmt(Math.max(0,r.left))}</td></tr>`});
+      h+=`<table class="tpl sm sch"><thead><tr><th>نمبر</th><th>مہینہ</th>${bd?M.used.map((d,i)=>`<th>${i+1}</th>`).join(''):''}<th>اس مہینے کی کل قسط</th><th>وصول ہوا</th><th>بقایا</th></tr></thead><tbody>${tr}
+        <tr><th colspan="${bd?M.used.length+2:2}">میزان</th><th class="num">${fmt(td)}</th><th class="num">${fmt(tg)}</th><th class="num">${fmt(Math.max(0,M.total-tg))}</th></tr></tbody></table>`;
+      if(M.skipped.length)h+=`<div class="muted" style="margin-top:6px">یہ بائیکیں جدول میں شامل نہیں (پہلی قسط کا مہینہ نہیں): ${M.skipped.map(d=>esc(d.item)).join('، ')}</div>`;
+    }
+    h+=`</div>`;
+  }
+  if(P.perbike){
+    pairs.forEach(({c,d})=>{h+=`<div class="pb" style="break-before:page;page-break-before:always"><div class="muted">خریدار: ${esc(c.name)}</div>${repAcct(d,0,true)}</div>`});
+  }
+  if(P.ledger){
+    const rec=[];pairs.forEach(({c,d})=>{const m=calc(d).m;for(let i=0;i<m;i++){const g2=Number((d.recv||[])[i])||0;if(g2>0)rec.push({date:rdateOf(d,i),who:c.name+' — '+d.item,amt:g2})}});
+    rec.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    h+=`<div class="pb" style="break-before:page;page-break-before:always"><h3>وصولی کا ریکارڈ</h3>`+
+      (rec.length?`<table class="tpl sm sch"><thead><tr><th>نمبر</th><th>تاریخ</th><th>بائیک / خریدار</th><th>رقم</th></tr></thead><tbody>${rec.map((r,i)=>`<tr><td>${i+1}</td><td>${r.date?isoU(r.date):''}</td><td>${esc(r.who)}</td><td class="num">${fmt(r.amt)}</td></tr>`).join('')}</tbody></table>`:'<div class="nl">ابھی کوئی وصولی نہیں۔</div>')+
+      `<table class="tpl sm" style="margin-top:12px"><tbody>${trow('قسطوں پر کل',fmt(sm.total))}${trow('اب تک کل وصول',fmt(sm.got))}${trow('خریداروں سے ابھی باقی',fmt(sm.left))}</tbody></table></div>`;
+  }
+  return h+`</div>`;
+}
+function viewMyReport(){
+  const pairs=[];state.clients.forEach(c=>{if((ui.rep.cids||[]).includes(c.id))c.deals.forEach(d=>{if(!d.owner)pairs.push({c,d})})});
+  if(!pairs.length){ui.rep=null;return viewHome()}
+  const P=Object.assign({},PAPER_DEF,ui.rep.papers||{}),g=CFG(),deals=pairs.map(x=>x.d);
+  const wm=g.wm&&(g.sellerName||g.sellerPhone)?`<div class="wm">${esc(g.sellerName)} ${esc(g.sellerPhone)}</div>`:'';
+  let h=`<div class="top no-print"><button class="link" data-a="repback">‹ واپس</button><button class="btn small" data-a="print">پرنٹ / PDF</button></div>
+  <div class="muted no-print" style="margin-bottom:8px">پرنٹ کھلنے پر "PDF محفوظ کریں" (Save as PDF) چنیں۔ چوڑے جدول کے لیے صفحہ آڑا آئے گا۔</div>${wm}
+  <div class="nama"><h1 class="nt">مجموعی حساب</h1><div class="nmeta"><span></span><span>تاریخ: ${isoU(today())}</span></div>
+  <table class="tpl sm"><tbody>${kv4([['نام',g.sellerName||''],['شناختی کارڈ',g.sellerCnic||''],['موبائل',g.sellerPhone||''],['گاہک / بائیکیں',new Set(pairs.map(x=>x.c.id)).size+' / '+pairs.length]])}</tbody></table>`;
+  const sm=ownSum(null,pairs);
+  if(P.details){
+    const grp=[];pairs.forEach(x=>{let g0=grp.find(z=>z.c.id===x.c.id);if(!g0){g0={c:x.c,ds:[]};grp.push(g0)}g0.ds.push(x.d)});
+    h+=`<h3>گاہکوں کی تفصیل</h3>`;
+    grp.forEach((g0,gi)=>{const c=g0.c;
+      h+=`<div class="band">${gi+1}) ${esc(c.name)}</div><table class="tpl sm"><tbody>${kv4([['گاہک کا نام',c.name],['والد کا نام',c.father||''],['شناختی کارڈ نمبر',c.cnic||''],['موبائل نمبر',c.phone||''],['پتہ',c.address||'']])}</tbody></table>`+
+        `<table class="tpl sm sch"><thead><tr><th>نمبر</th><th>بائیک</th><th>قسطوں پر کل</th><th>مہینے</th><th>ماہانہ</th></tr></thead><tbody>${g0.ds.map((d,di)=>{const s2=stats(d);const f2=d.info||{};return `<tr><td>${di+1}</td><td>${esc([f2.brand,f2.model].filter(Boolean).join(' ')||d.item)}</td><td class="num">${fmt(s2.total)}</td><td>${s2.m}</td><td class="num">${fmt(s2.per)}</td></tr>`}).join('')}</tbody></table>`;
+    });
+  }
+  if(P.bikefull){
     pairs.forEach(({c,d},i)=>{
       const s=stats(d),f=d.info||{};
       const ag=d.agentOn?([d.agName||g.agentName,d.agPhone||g.agentPhone].filter(Boolean).join(' · ')||'ہاں'):'نہیں';
@@ -994,6 +1094,7 @@ function viewOwnReport(){
 }
 function viewReport(){
   if(ui.rep.kind==='own')return viewOwnReport();
+  if(ui.rep.kind==='mine')return viewMyReport();
   if(ui.rep.kind==='nama')return viewNama();
   if(ui.rep.kind==='inv')return viewInvStatement();
   if(ui.rep.kind==='invag')return viewInvAgreement();
@@ -1144,12 +1245,15 @@ document.addEventListener('click',e=>{
   }
   else if(a==='report'){const c=state.clients.find(c=>c.deals.some(d=>d.id===v));ui.rep={cid:c.id,dids:[v]};render();window.scrollTo(0,0)}
   else if(a==='mkrep'){const c=findClient(v);const dids=repSelOf(c);if(!dids.length){toast('کم از کم ایک سودا چنیں');return}ui.rep={cid:v,dids};render();window.scrollTo(0,0)}
+  else if(a==='pmprev'){ui.pm=shiftM(ui.pm||today().slice(0,7),-1);render()}
+  else if(a==='pmnext'){ui.pm=shiftM(ui.pm||today().slice(0,7),1);render()}
   else if(a==='cprev'){ui.cm=shiftM(ui.cm||today().slice(0,7),-1);render()}
   else if(a==='cnext'){ui.cm=shiftM(ui.cm||today().slice(0,7),1);render()}
   else if(a==='remind'){const ym=ui.cm||today().slice(0,7);const r=collectRows(ym).find(x=>x.c.id===v);if(r)copyText(remindText(r.c,r.items,ym))}
   else if(a==='stmt'){const c=findClient(v);copyText(stmtText(c,c.deals.filter(d=>(ui.rep.dids||[]).includes(d.id))))}
   else if(a==='fbclose'){ui.fb=null;render()}
   else if(a==='repback'){ui.rep=null;render()}
+  else if(a==='myrep'){const cids=mySelOf();if(!cids.length){toast('کم از کم ایک گاہک چنیں');return}ui.rep={kind:'mine',cids,papers:paperSel()};render();window.scrollTo(0,0)}
   else if(a==='copybk'){
     const ta=document.getElementById('bk');ta.focus();ta.select();ta.setSelectionRange(0,ta.value.length);
     let ok=false;
@@ -1182,6 +1286,7 @@ document.addEventListener('change',e=>{
   }
   if(t.dataset.rd){const p=findDeal(t.dataset.rd);p.rdate=p.rdate||[];p.rdate[Number(t.dataset.i)]=t.value;save();return}
   if(t.dataset.ow){const o=findOwn(t.dataset.id);o[t.dataset.ow]=t.value.trim();if(t.dataset.ow==='name'&&!o.name)o.name='مالک';save();render();return}
+  if(t.dataset.ms){const id=t.dataset.ms;let sel=mySelOf().slice();if(t.checked){if(!sel.includes(id))sel.push(id)}else sel=sel.filter(x=>x!==id);ui.mySel=sel;render();return}
   if(t.dataset.os){
     const o=state.owners.find(x=>ownerDeals(x.id).some(y=>y.d.id===t.dataset.os));ui.ownSel=ui.ownSel||{};
     const cur=ownSelOf(o);const i=cur.indexOf(t.dataset.os);if(i>=0)cur.splice(i,1);else cur.push(t.dataset.os);ui.ownSel[o.id]=cur;render();return;
