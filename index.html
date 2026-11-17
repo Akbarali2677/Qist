@@ -360,6 +360,40 @@ function pairsStats(pairs){
   pairs.forEach(({d})=>{const s=stats(d);total+=s.total;got+=s.got;const di=dueInfo(d,ym);if(di)ex+=Math.min(di.due,di.left)});
   return {total,got,left:total-got,ex};
 }
+const ownerHasComm=o=>(o.commType==='month'||o.commType==='bike')&&(Number(o.commAmt)||0)>0;
+function ownerCommMonth(o,ym){
+  if(!ownerHasComm(o))return 0;const a=Number(o.commAmt)||0;
+  const ds=ownerDeals(o.id).map(x=>x.d).filter(d=>d.start);
+  if(o.commType==='month')return ds.some(d=>{const i=monthIndex(d,ym);return i!==null&&i>=0&&i<calc(d).m})?a:0;
+  return ds.filter(d=>d.start===ym).length*a;
+}
+function ownerCommTotal(o){
+  if(!ownerHasComm(o))return 0;const nowYM=today().slice(0,7);
+  const ds=ownerDeals(o.id).map(x=>x.d).filter(d=>d.start);if(!ds.length)return 0;
+  let k=ds.map(d=>d.start).sort()[0],t=0,g=0;
+  while(k<=nowYM&&g++<600){t+=ownerCommMonth(o,k);k=shiftM(k,1)}
+  return t;
+}
+const ownersCommMonth=ym=>OWNS().reduce((a,o)=>a+ownerCommMonth(o,ym),0);
+const ownersCommTotal=()=>OWNS().reduce((a,o)=>a+ownerCommTotal(o),0);
+function ownerCommRows(o){
+  if(!ownerHasComm(o))return '';
+  const pm=ui.pm||today().slice(0,7);const lb=pm===today().slice(0,7)?'اس مہینے':ymLabel(pm);
+  return `<div class="row"><span><b>میرا کمیشن (${lb})</b></span><span class="num in"><b>${fmt(ownerCommMonth(o,pm))}</b></span></div><div class="row" style="border:0"><span>میرا کمیشن (اب تک)</span><span class="num">${fmt(ownerCommTotal(o))}</span></div>`;
+}
+function ownerProfitNums(pairs,ym){
+  let profit=0,got=0,month=0;
+  pairs.forEach(({d})=>{const st=stats(d);profit+=st.profit;if(st.total>0)got+=st.got*st.profit/st.total;month+=dealProfitMonth(d,ym)});
+  return {profit:Math.round(profit),got:Math.round(got),month:Math.round(month)};
+}
+function ownerProfitRows(pairs,more){
+  const pm=ui.pm||today().slice(0,7);const n=ownerProfitNums(pairs,pm);const lb=pm===today().slice(0,7)?'اس مہینے':ymLabel(pm);
+  return `<div class="row"><span>کل منافع (طے شدہ)</span><span class="num in">${fmt(n.profit)}</span></div><div class="row"><span>اب تک وصول شدہ منافع</span><span class="num">${fmt(n.got)}</span></div><div class="row"${more?'':' style="border:0"'}><span>${lb} کا منافع</span><span class="num in">${fmt(n.month)}</span></div>`;
+}
+function ownersProfitPanel(rows){
+  const pm=ui.pm||today().slice(0,7);const all=[].concat(...rows.map(r=>r.pairs));
+  return `<div class="panel"><div class="row" style="align-items:center"><b>مالکان کا منافع</b><span style="display:flex;align-items:center;gap:6px"><button class="link" data-a="pmprev" aria-label="پچھلا مہینہ">›</button><b>${ymLabel(pm)}</b><button class="link" data-a="pmnext" aria-label="اگلا مہینہ">‹</button></span></div>${ownerProfitRows(all)}<div class="muted" style="margin-top:6px">یہ مالکان کا منافع ہے، آپ کا نہیں۔ قسط کے مہینے کے حساب سے۔</div></div>`+(OWNS().some(ownerHasComm)?`<div class="panel"><div class="row"><b>مالکان سے میرا کمیشن</b></div><div class="row"><span>${pm===today().slice(0,7)?'اس مہینے':ymLabel(pm)}</span><span class="num in">${fmt(ownersCommMonth(pm))}</span></div><div class="row" style="border:0"><span>اب تک</span><span class="num">${fmt(ownersCommTotal())}</span></div></div>`:'');
+}
 function monthProfitInfo(all,ym){
   const nowYM=today().slice(0,7);
   let recv=0,profit=0;
@@ -396,12 +430,13 @@ function viewHome(){
     const shares=INVS().reduce((a,v)=>a+invSum(v).shares,0);
     h+=`<div class="hero"><div class="lbl">میرا: کل باقی وصولی</div><div class="big">${fmt(tot.left)}</div>
       <div class="sub"><div>کل طے شدہ<b>${fmt(tot.total)}</b></div><div>اب تک وصول<b>${fmt(tot.got)}</b></div></div></div>
-    ${(()=>{const pm=ui.pm||today().slice(0,7);const mp=monthProfitInfo(all,pm);const cur=pm===today().slice(0,7);const lb=cur?'اس مہینے':ymLabel(pm);return `<div class=\"panel\">
+    ${(()=>{const pm=ui.pm||today().slice(0,7);const mp=monthProfitInfo(all,pm);const cmM=ownersCommMonth(pm),anyC=OWNS().some(ownerHasComm);const cur=pm===today().slice(0,7);const lb=cur?'اس مہینے':ymLabel(pm);return `<div class=\"panel\">
       <div class=\"row\" style=\"align-items:center\"><b>ماہانہ منافع</b><span style=\"display:flex;align-items:center;gap:6px\"><button class=\"link\" data-a=\"pmprev\" aria-label=\"پچھلا مہینہ\">›</button><b>${ymLabel(pm)}</b><button class=\"link\" data-a=\"pmnext\" aria-label=\"اگلا مہینہ\">‹</button></span></div>
       <div class=\"row\"><span>${lb} کی قسطوں کی وصولی</span><span class=\"num\">${fmt(mp.recv)}</span></div>
       <div class=\"row\"><span>${lb} کا منافع</span><span class=\"num in\">${fmt(mp.profit)}</span></div>
       ${INVS().length?`<div class=\"row\"><span>سرمایہ کاروں کا حصہ (${lb})</span><span class=\"num out\">${fmt(mp.shares)}</span></div>`:''}
       <div class=\"row\"><span><b>میرا منافع ${lb} (حصہ نکال کر)</b></span><span class=\"num in\"><b>${fmt(mp.net)}</b></span></div>
+      ${anyC?`<div class="row"><span>مالکان سے میرا کمیشن (${lb})</span><span class="num in">${fmt(cmM)}</span></div><div class="row"><span><b>میری کل کمائی ${lb} (منافع + کمیشن)</b></span><span class="num in"><b>${fmt(mp.net+cmM)}</b></span></div>`:''}
       <div class=\"muted\" style=\"margin-top:6px\">قسط کے مہینے کے حساب سے، یعنی جس مہینے کی قسط ہے، چاہے رقم بعد میں آئے۔</div></div>`})()}
     <div class="panel">
       <div class="row"><span>اس مہینے متوقع قسطیں</span><span class="num">${fmt(tot.ex)}</span></div>
@@ -437,6 +472,7 @@ function viewHome(){
       <div class="sub"><div>کل طے شدہ<b>${fmt(tot.total)}</b></div><div>اب تک وصول<b>${fmt(tot.got)}</b></div></div></div>
     <div class="panel"><div class="row"><span>اس مہینے متوقع قسطیں</span><span class="num">${fmt(tot.ex)}</span></div>
       <div class="row"><span>مالکان / بائیکیں</span><span class="num">${rows.length} / ${rows.reduce((a,r)=>a+r.pairs.length,0)}</span></div></div>
+    ${rows.length?ownersProfitPanel(rows):''}
     <h2>ہر مالک کا الگ خلاصہ</h2>${rows.length>4?srch:''}`;
     const list=rows.filter(r=>hit(r.o.name));
     if(!rows.length)h+=`<div class="panel"><div class="empty">ابھی کوئی مالک نہیں۔<br>نیچے "سرمایہ کار" ٹیب میں "مالکان" چن کر شامل کریں۔</div></div>`;
@@ -448,7 +484,7 @@ function viewHome(){
         <div class="bar"><i style="width:${pc}%"></i></div>
         <div class="row"><span>قسطوں پر کل</span><span class="num">${fmt(r.st.total)}</span></div>
         <div class="row"><span>اب تک وصول</span><span class="num in">${fmt(r.st.got)}</span></div>
-        <div class="row" style="border:0"><span>اس مہینے کی قسطیں</span><span class="num">${fmt(r.st.ex)}</span></div></div>`;
+        <div class="row"><span>اس مہینے کی قسطیں</span><span class="num">${fmt(r.st.ex)}</span></div>${ownerProfitRows(r.pairs,ownerHasComm(r.o))}${ownerCommRows(r.o)}</div>`;
     });
     return h;
   }
@@ -958,10 +994,13 @@ function viewOwner(){
   const f=(k,l,extra)=>`<label>${l}</label><input data-ow="${k}" data-id="${o.id}" value="${esc(o[k]||'')}" ${extra||''}>`;
   let h=`<div class="top"><button class="link" data-a="ownback">‹ واپس</button></div>
   <div class="panel">${f('name','مالک کا نام')}${f('cnic','شناختی کارڈ نمبر','inputmode="numeric" style="direction:ltr;text-align:right"')}${f('phone','موبائل نمبر','inputmode="tel" style="direction:ltr;text-align:right"')}</div>
+  <div class="panel"><b>میرا کمیشن</b><div class="muted">اس مالک کے کام پر آپ کا کمیشن۔ یہ مالک کے منافع میں شامل نہیں ہوتا۔</div>
+    <label>کمیشن کی قسم</label><select data-ow="commType" data-id="${o.id}"><option value="" ${!ownerHasComm(o)&&o.commType!=='month'&&o.commType!=='bike'?'selected':''}>کوئی کمیشن نہیں</option><option value="month" ${o.commType==='month'?'selected':''}>ماہانہ رقم</option><option value="bike" ${o.commType==='bike'?'selected':''}>فی بائیک رقم</option></select>
+    ${o.commType==='month'||o.commType==='bike'?`<label>${o.commType==='month'?'ہر ماہ کی رقم (روپے)':'فی بائیک رقم (روپے)'}</label><input data-ow="commAmt" data-id="${o.id}" inputmode="numeric" placeholder="مثلاً 2000" value="${esc(o.commAmt||'')}" style="direction:ltr;text-align:right">`:''}</div>
   <div class="panel"><b>خلاصہ (سب بائیکیں)</b>
     <div class="row"><span>قسطوں پر کل</span><span class="num">${fmt(sm.total)}</span></div>
     <div class="row"><span>اب تک وصول</span><span class="num in">${fmt(sm.got)}</span></div>
-    <div class="row"><span>خریداروں سے ابھی باقی</span><span class="num warn">${fmt(sm.left)}</span></div></div>
+    <div class="row"><span>خریداروں سے ابھی باقی</span><span class="num warn">${fmt(sm.left)}</span></div>${ownerProfitRows(pairs,ownerHasComm(o))}${ownerCommRows(o)}</div>
   <h2>اس مالک کی بائیکیں</h2><div class="muted" style="margin-bottom:4px">رپورٹ میں شامل کرنے کے لیے ٹک کریں۔ بائیک اس مالک کے نام پر سودے کے صفحے سے جڑتی ہے۔</div>
   <div class="panel">`;
   if(!pairs.length)h+=`<div class="empty">ابھی کوئی بائیک نہیں جڑی۔ گاہک ← سودا ← "اس بائیک کا مالک" میں اس کا نام چنیں۔</div>`;
